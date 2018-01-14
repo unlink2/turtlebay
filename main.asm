@@ -141,30 +141,14 @@ Player1UpNotPressed
 Picture
 	stx COLUBK ; ranbow effect on background
 
-Top8LinesWall
-	sta WSYNC
-	inx
-	cpx #8 ; line 8?
-	bne Top8LinesWall ; No? Another loop
-
-	; now we change the lines
-	lda #%00010000 ; PF0 is mirrored <--- direction, low 4 bits ignored
-	sta PF0
-	lda #0
-	sta PF1
-	sta PF2
-
-	; again, we don't bother writing PF0-PF2 every scanline - they never change!
-	ldy #0 ; load y with 0, we use y to count sprite tables
-MiddleLinesWall
-	; push y to save for later
 	lda #1 ; load an odd number into a
 	and FRAMECOUNT ; and it with framecount to see if even or odd frame count
 	; only do sprites on odd frames 0 == even 1 == odd
 	cmp NULL
 	beq SpriteDone
 
-	; sprite stuff
+	; sprite stuff 192 scanlines
+SpriteStart
 	cpx SPR1Y
 	bcc SpriteReset
 	cpy #SPRITE1H
@@ -190,7 +174,28 @@ SpriteReset
 	lda #0
 	sta GRP0
 SpriteDone
+	sta WSYNC
+	inx
+	cpx #192
+	bne SpriteStart
 
+Top8LinesWall
+	sta WSYNC
+	inx
+	cpx #8 ; line 8?
+	bne Top8LinesWall ; No? Another loop
+
+	; now we change the lines
+	lda #%00010000 ; PF0 is mirrored <--- direction, low 4 bits ignored
+	sta PF0
+	lda #0
+	sta PF1
+	sta PF2
+
+	; again, we don't bother writing PF0-PF2 every scanline - they never change!
+	ldy #0 ; load y with 0, we use y to count sprite tables
+MiddleLinesWall
+	; push y to save for later
 	sta WSYNC
 
 	inx
