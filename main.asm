@@ -26,6 +26,7 @@ SPR2Y ds 1
 
 TIMETOCHANGE = 20 ; speed of animation
 SPRITE1H = 16
+NULL = 0 ; just 0
 
 	SEG
 ; ----------
@@ -53,7 +54,7 @@ Clear
 	sta CTRLPF ; reflect playfield
 
 	; srptie colours
-	lda #$56
+	lda #$69
 	sta COLUP0
 	lda #$67
 	sta COLUP1
@@ -157,6 +158,11 @@ Top8LinesWall
 	ldy #0 ; load y with 0, we use y to count sprite tables
 MiddleLinesWall
 	; push y to save for later
+	lda #1 ; load an odd number into a
+	and FRAMECOUNT ; and it with framecount to see if even or odd frame count
+	; only do sprites on odd frames 0 == even 1 == odd
+	cmp NULL
+	beq SpriteDone
 
 	; sprite stuff
 	cpx SPR1Y
@@ -166,6 +172,7 @@ MiddleLinesWall
 	; SLEEP 20
 
 	lda SPR1X
+
 	sec ; Set the carry flag so no borrow will be applied during the division.
 .divideby15 ; Waste the necessary amount of time dividing X-pos by 15!
 	sbc #15
@@ -182,7 +189,6 @@ SpriteReset
 	; reset sprite registers to 0
 	lda #0
 	sta GRP0
-	sta GRP1
 SpriteDone
 
 	sta WSYNC
@@ -200,6 +206,11 @@ SpriteDone
 	sta PF2
 
 Bottom8LinesWall
+	; make sure sprite registers are cleared here!
+	lda 0
+	sta GRP0
+	sta GRP1
+
 	sta WSYNC
 	inx
 	cpx #192
@@ -213,6 +224,11 @@ Bottom8LinesWall
 
 
 	; 30 scanlines of overscan
+	lda #0
+	sta PF0
+	sta PF1
+	sta PF2
+
 	ldx #0
 Overscan
 	sta WSYNC
@@ -224,10 +240,21 @@ Overscan
 
 ; Plays the Intro noise
 PlayIntroSong
-	lda 2
-	;sta AUDC0
-	;sta AUDF0
-	;sta AUDV0
+	lda #2
+	sta AUDC0
+	sta AUDF0
+	sta AUDV0
+
+	jsr ClearSong
+
+	rts
+
+ClearSong
+	; song done, now we quit
+	lda #0
+	sta AUDC0
+	sta AUDF0
+	sta AUDV0
 	rts
 
 ; use jsr to jump here
@@ -284,31 +311,6 @@ TurtleSprite
 	.byte  %11100000
 
 	;------------------------------------------------------------------------------
-
-	;-----------------------------
-	; This table converts the "remainder" of the division by 15 (-1 to -15) to the correct
-	; fine adjustment value. This table is on a page boundary to guarantee the processor
-	; will cross a page boundary and waste a cycle in order to be at the precise position
-	; for a RESP0,x write
-
-fineAdjustBegin
-	.byte %01110000; Left 7
-	.byte %01100000; Left 6
- 	.byte %01010000; Left 5
-	.byte %01000000; Left 4
-	.byte %00110000; Left 3
-	.byte %00100000; Left 2
-	.byte %00010000; Left 1
-	.byte %00000000; No movement.
-	.byte %11110000; Right 1
-	.byte %11100000; Right 2
-	.byte %11010000; Right 3
-	.byte %11000000; Right 4
-	.byte %10110000; Right 5
-	.byte %10100000; Right 6
- 	.byte %10010000; Right 7
-
-fineAdjustTable EQU fineAdjustBegin - %11110001; NOTE: %11110001 = -15
 
 	ORG $FFFA
 
