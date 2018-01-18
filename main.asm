@@ -37,7 +37,7 @@ DigitTens ds 2
 ScoreGfx ds 1
 TimerGfx ds 1
 
-Temp ds 1
+Temp ds 4 ; 4 bytes of temp storage
 
 ; object X positions in $89-8C
 ObjectX:        ds 4    ; player0, player1, missile0, missile1
@@ -62,6 +62,9 @@ Lives: ds 1 ; live counter
 Level: ds 1 ; level counter
 
 AnimationTimer ds 4 ; animation timer for p0, p1, m0, m1
+
+PreviousX ds 4
+PreviousY ds 4
 
 	; ---------- Constants
 
@@ -101,8 +104,9 @@ Clear
 	stx Level
 	stx CurrentMap
 
+	ldx #15
 	stx ObjectX
-  ldx #8
+  ldx #12
   stx ObjectX+1
   ldy #$30
   sty ObjectY
@@ -142,6 +146,8 @@ Sleep12 ; jsr here to sleep for 12 cycles
 	rts
 
 VerticalBlank
+	; game logic call
+	jsr ProcessJoystick
 	jsr PositionObjects
 	jsr SetObjectColours
 	jsr PrepScoreForDisplay
@@ -226,6 +232,12 @@ scoreLoop
 	ldx #0
 	stx Temp ; store map counter in temp
 pfLoop
+	tya ; 2 29 - 2LK loop counter in A for testing
+	and #%11 ; 2 31 - test for every 4th time through the loop,
+	bne SkipMapCounter ; 2 33 (3 34) branch if not 4th time
+	inc Temp ; 2 35 - if 4th time, increase Temp so new playfield data is used
+SkipMapCounter
+
 	; continuation of line 2 of the 2LK
 	; this precalculates data that's used on line 1 of the 2LK
 	lda #TURTLEHEIGHT-1 ; height of turtle sprite - 1
@@ -240,6 +252,9 @@ DoDrawGrp0 ;
 
 	sta GRP0 ; update player0 to draw turtle
 
+	; store current y in temp+1
+	sty Temp+1
+	ldy Temp ; load map counter
 	; draw playfield
 	lda (MapPtr0),y ; playfiled pattern test
 	sta PF0
@@ -247,6 +262,9 @@ DoDrawGrp0 ;
 	sta PF1
 	lda (MapPtr2),y ; playfiled pattern test
 	sta PF2
+
+	; restore y
+	ldy Temp+1
 
 	; precalculate date for next line
 	lda #TURTLEHEIGHT-1 ; height of gfx
@@ -278,10 +296,17 @@ Overscan
 	lda #32 ; set time for 27 scanlines 32 = ((27 * 76) / 64)
 	sta TIM64T ; timer will go off after 27 scanlines
 
-	; game logic call
-	jsr ProcessJoystick
+	ldy #0 ; collision detection
+	;sty Temp
+CollisionLoop
+	sty Temp
+	jsr CollisionDetection
+	iny
+	cpy #3
+	bne CollisionLoop
 
 	lda #1
+	sta CXCLR ; clear collision
 overscanLoop
 	sta WSYNC
 	lda INTIM ; check timer
@@ -290,32 +315,50 @@ overscanLoop
 
 
 ProcessJoystick
-; game logic here
+	; now we store old x and y
+	ldx ObjectX
+	stx PreviousX
+	ldx ObjectY
+	stx PreviousY
+
+	ldx ObjectX+1
+	stx PreviousX+1
+	ldx ObjectY+1
+	stx PreviousY+1
+
+	; load Temp with 0 to enable collision
+	ldx #0
+	stx Temp
+	; game logic here
 	lda  SWCHA ; input registr
 	asl  ; test bit 0, left joy - right input
 	bcs Player1RightNotPressed ; this operation sets the carry for the fromer bit that fell off
 	ldy #0 ; right presses
 	ldx #0
-	jsr CollisionDetection
+	jsr MoveObject
 Player1RightNotPressed
 	asl ; test bit 1, left joy - left input
 	bcs Player1LeftNotPressed
 	ldy #0 ; left presses
 	ldx #1
-	jsr CollisionDetection
+	jsr MoveObject
 Player1LeftNotPressed
 	asl ; test bit 1, left joy - down input
 	bcs Player1DownNotPressed
 	ldy #0
 	ldx #2
-	jsr CollisionDetection
+	jsr MoveObject
 Player1DownNotPressed
 	asl ; test bit 2, left joy - up input
 	bcs Player1UpNotPressed
 	ldy #0
 	ldx #3
-	jsr CollisionDetection
+	jsr MoveObject
 Player1UpNotPressed
+
+	; set Temp to 1 to disable collision for bird
+	ldx #1
+	stx Temp
 
 	; check left difficulty switch
 	bit SWCHB       ; state of Right Difficult in N (negative flag)
@@ -330,25 +373,25 @@ LeftIsBJoy
 	bcs Player2RightNotPressed
 	ldy #1
 	ldx #0
-	jsr CollisionDetection
+	jsr MoveObject
 Player2RightNotPressed
 	asl ; test bit 1, right joy - left input
 	bcs Player2LeftNotPressed
 	ldy #1
 	ldx #1
-	jsr CollisionDetection
+	jsr MoveObject
 Player2LeftNotPressed
 	asl ; test bit 1, right joy - down input
 	bcs Player2DownNotPressed
 	ldy #1
 	ldx #2
-	jsr CollisionDetection
+	jsr MoveObject
 Player2DownNotPressed
 	asl ; test bit 2, right joy - up input
 	bcs Player2UpNotPressed
 	ldy #1
 	ldx #3
-	jsr CollisionDetection
+	jsr MoveObject
 Player2UpNotPressed
 	rts
 
@@ -360,13 +403,15 @@ BirdAI
 ; Expected inputs:
 ; y - object's address offset, p0, p1, m0, m1
 ; x - move left, right, up, or down
+; set Temp memory address to 1 to ignore collision.
+; every other value will NOT ignore collision
 ; Retruns: 0, 1 or 2 in x
 ; 0 = no collision
 ; 1 = wall collision
 ; 2 = bird collision
 ; 3 = missile collision
-;;====================
-CollisionDetection
+;====================
+MoveObject ; for some reason the first frame of collision does not detect?
 	cpx #0
 	beq RightCollision
 	cpx #1
@@ -385,7 +430,7 @@ SaveXRight
 	stx ObjectX,y
 	ldx #1
 	stx REFP0,y ; makes turtle image face right
-	rts
+	jmp MoveDone
 LeftCollision
 	; left pressed code
 	ldx ObjectX,y
@@ -397,7 +442,7 @@ SaveXLeft
 	stx ObjectX,y
 	ldx #0
 	stx REFP0,y ; makes turtle image face left
-	rts
+	jmp MoveDone
 UpCollision
 	; down pressed code
 	ldx ObjectY,y
@@ -407,7 +452,7 @@ UpCollision
 	ldx #PFHEIGHT
 SaveYUp
 	stx ObjectY,y
-	rts
+	jmp MoveDone
 DownCollision
 	; down pressed code
 	ldx ObjectY,y
@@ -417,6 +462,42 @@ DownCollision
 	ldx #0
 SaveYDown
 	stx ObjectY,y
+
+MoveDone
+	rts
+
+	;====================
+	; This sub checks for collision based on inputs stored
+	; Expected inputs:
+	; y - object's address offset, p0, p1, m0, m1
+	; set Temp memory address to 1 to ignore collision.
+	; every other value will NOT ignore collision
+	; Retruns: 0, 1 or 2 in x
+	; 0 = no collision
+	; 1 = wall collision
+	; 2 = bird collision
+	; 3 = missile collision
+	;====================
+CollisionDetection
+	ldx Temp ; check if collision is enabled
+	cpx #1 ; if it is 1 just return no
+	beq CollisionDone
+	; otherwise check collision
+	ldx CXP0FB,y ; load into x for bit operation
+	stx Temp+1 ; sotre for bit operation
+	bit Temp+1 ; N = player0/playfield, V=player0/ball
+	bpl NoPFCollision ; if N is off, then player did not collide with playfield
+	; if collision restore position.
+	lda PreviousX,y
+	sta ObjectX,y
+	lda PreviousY,y
+	sta ObjectY,y
+
+	ldx #1 ; this means wall collision
+	jmp CollisionDone
+NoPFCollision
+	ldx #0
+CollisionDone
 	rts
 
 ; Plays the Intro noise
@@ -753,50 +834,74 @@ DigitGfx:
 ; the room table holds pf information for each 1/2 scanline as a byte. 45 bytes
 ; All rooms require PF1 and PF2 tables as well
 Room1LayoutPF0:
-	REPEAT PFHEIGHT/12
-	.byte %11111111
-	.byte %10000000
-	.byte %10000000
-	.byte %10000000
-	.byte %10000000
-	.byte %10000000
-	.byte %10000000
-	.byte %10000000
-	.byte %10000000
-	.byte %10000000
-	.byte %10000000
-	.byte %11111111
-	REPEND
+	.byte %11110000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %11110000
 Room1LayoutPF1:
-	REPEAT PFHEIGHT/12
 	.byte %11111111
-	.byte %00000001
-	.byte %00000001
-	.byte %00000001
-	.byte %00000001
+	.byte %00000000
+	.byte %00000000
+	.byte %00111000
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
+	.byte %11000000
+	.byte %01000000
+	.byte %01000000
+	.byte %01000001
+	.byte %01000001
+	.byte %01000000
+	.byte %01000000
+	.byte %11000000
 	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00111000
 	.byte %00000000
 	.byte %00000000
 	.byte %11111111
-	REPEND
 Room1LayoutPF2:
-	REPEAT PFHEIGHT/12
 	.byte %11111111
+	.byte %10000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00011100
+	.byte %00000100
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
+	.byte %00000100
+	.byte %00011100
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
+	.byte %10000000
 	.byte %11111111
-	REPEND
 
 
 ; Table holding all the room start addresses next to each other
