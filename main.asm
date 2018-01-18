@@ -296,23 +296,14 @@ Overscan
 	lda #32 ; set time for 27 scanlines 32 = ((27 * 76) / 64)
 	sta TIM64T ; timer will go off after 27 scanlines
 
-	ldy #0 ; collision detection
-	;sty Temp
-CollisionLoop
-	sty Temp
 	jsr CollisionDetection
-	iny
-	cpy #3
-	bne CollisionLoop
 
 	lda #1
-	sta CXCLR ; clear collision
 overscanLoop
 	sta WSYNC
 	lda INTIM ; check timer
 	bpl overscanLoop
 	rts
-
 
 ProcessJoystick
 	; now we store old x and y
@@ -469,35 +460,57 @@ MoveDone
 	;====================
 	; This sub checks for collision based on inputs stored
 	; Expected inputs:
-	; y - object's address offset, p0, p1, m0, m1
-	; set Temp memory address to 1 to ignore collision.
-	; every other value will NOT ignore collision
-	; Retruns: 0, 1 or 2 in x
-	; 0 = no collision
-	; 1 = wall collision
-	; 2 = bird collision
-	; 3 = missile collision
+	; y = object's address offset
+	; Retruns: nothing
 	;====================
-CollisionDetection
-	ldx Temp ; check if collision is enabled
-	cpx #1 ; if it is 1 just return no
-	beq CollisionDone
-	; otherwise check collision
-	ldx CXP0FB,y ; load into x for bit operation
-	stx Temp+1 ; sotre for bit operation
-	bit Temp+1 ; N = player0/playfield, V=player0/ball
-	bpl NoPFCollision ; if N is off, then player did not collide with playfield
-	; if collision restore position.
+RestorePos
 	lda PreviousX,y
 	sta ObjectX,y
 	lda PreviousY,y
 	sta ObjectY,y
+	rts
 
-	ldx #1 ; this means wall collision
-	jmp CollisionDone
-NoPFCollision
-	ldx #0
+	;====================
+	; This sub checks for collision based on inputs stored
+	; Expected inputs:
+	; y - object's address offset, p0, p1, m0, m1
+	; set Temp memory address to 1 to ignore collision.
+	; set Temp to 2 to not restore position
+	; every other value will NOT ignore collision
+	; Retruns: 0 or 1 in Temp and Temp+1
+	; 0 = no collision
+	; 1 = collision
+	; returns Temp for lower bit and Temp+1 for higher bit
+	; those mean different things depending on the check performed
+	;====================
+CollisionDetection
+	; First we check collision for p0 and pf
+	bit CXP0FB ; N = player0/playfield, V=player0/ball
+	bpl NoP0PFCollision ; if N is off, then player did not collide with playfield
+	ldy #0 ; 0th object is player0
+	jsr RestorePos
+NoP0PFCollision
+	; now we check collision between p0 and p1
+	bit CXPPMM
+	bpl NoP0P1Collision
+	dec Lives ; kill p0
+NoP0P1Collision ; p0 and p1 did not collide!
 CollisionDone
+	lda #1
+	sta CXCLR ; clear collision
+	rts
+
+PlayerCollision
+	; now we do special case collision
+	; first collision between p1 and p0
+	ldx Temp ; x must be 1 if p1 and p0 collided
+	cpx #1
+	bne NoPlayerCollision
+
+	; if player is hit by bird remove a life
+	dec Lives
+
+NoPlayerCollision
 	rts
 
 ; Plays the Intro noise
@@ -593,7 +606,7 @@ TurtleFrame1
 	lda #>(TurtleSprite + TURTLEHEIGHT - 1)
 	sbc #0
 	sta TurtlePtr+1
-	jmp BirdFrame1
+	jmp BirdRender
 
 TurtleFrame2
 	; TurtleDraw = PFHEIGHT + TURTLEHEIGHT - Y position
@@ -613,9 +626,17 @@ TurtleFrame2
 
 	ldx AnimationTimer
 	cpx #20 ; compare to 10 if 10 reset to 0
-	bne BirdFrame1
+	bne BirdRender
 	lda #0
 	sta AnimationTimer
+
+BirdRender
+	; every other frame load different animation
+	ldx AnimationTimer+1
+	inc AnimationTimer+1
+	cpx #10 ; every 5th or more frame draw 2nd frame
+	bmi BirdFrame1
+	jmp BirdFrame2 ; TODO this can be made much better
 
 BirdFrame1
 	; BirdDraw = PFHEIGHT + BIRDHEIGHT - Y position
@@ -632,7 +653,30 @@ BirdFrame1
 	lda #>(BirdSprite + BIRDHEIGHT - 1)
 	sbc #0
 	sta BirdPtr+1
+	jmp RenderDone
+BirdFrame2
+	; BirdDraw = PFHEIGHT + BIRDHEIGHT - Y position
+	lda #(PFHEIGHT + BIRDHEIGHT2)
+	sec
+	sbc ObjectY+1
+	sta BirdDraw
 
+	; BirdPtr = TurtleSprite + TURTLEHEIGHT - 1 - Y position
+	lda #<(BirdSprite2 + BIRDHEIGHT2 - 1)
+	sec
+	sbc ObjectY+1
+	sta BirdPtr
+	lda #>(BirdSprite2 + BIRDHEIGHT2 - 1)
+	sbc #0
+	sta BirdPtr+1
+
+	ldx AnimationTimer+1
+	cpx #20 ; compare to 10 if 10 reset to 0
+	bne RenderDone
+	lda #0
+	sta AnimationTimer+1
+
+RenderDone
 	; use Difficulty Switches to test how Vertical Delay works
 	ldx #0
 	stx VDELP0      ; turn off VDEL for player0
@@ -712,15 +756,15 @@ TurtleSprite2:
 TURTLEHEIGHT2 = * - TurtleSprite2
 
 TurtleDeadSprite:
+	.byte %10000001
 	.byte %01000010
-	.byte %11000011
-	.byte %00111100
-	.byte %00111100
-	.byte %00111100
-	.byte %01111110
-	.byte %01011010
+	.byte %00100100
+	.byte %00011000
+	.byte %00011000
+	.byte %00100100
 	.byte %01000010
-TURTLEHDEADEIGHT2 = * - TurtleDeadSprite
+	.byte %10000001
+TURTLEHDEADEIGHT = * - TurtleDeadSprite
 
 BirdSprite:
 	.byte %00000000
@@ -732,6 +776,17 @@ BirdSprite:
 	.byte %00011000
 	.byte %00100100
 BIRDHEIGHT = * - BirdSprite
+
+BirdSprite2:
+	.byte %00000000
+	.byte %00011000
+	.byte %00011000
+	.byte %00100100
+	.byte %01011010
+	.byte %10011001
+	.byte %00011000
+	.byte %00100100
+BIRDHEIGHT2 = * - BirdSprite2
 
 	align 256
 DigitGfx:
