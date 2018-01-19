@@ -48,10 +48,17 @@ ObjectY:        ds 4    ; player0, player1, missile0, missile1
 ; DoDraw storage in $91-92
 TurtleDraw:      ds 1    ; used for drawing player0
 BirdDraw:        ds 1    ; used for drawing player1
+BallDraw: ds 1
 
 ; DoDraw Graphic Pointer in $93-94
 TurtlePtr:       ds 2    ; used for drawing player0
 BirdPtr:         ds 2    ; used for drawing player1
+M0Ptr: ds 2
+
+; used for Bird AI to keep track of movement
+BirdAICounter ds 1
+BirdLeftRightStatus ds 1
+BirdUpDownStatus ds 1
 
 ; map pointer used for map rendering
 MapPtr0:         ds 2    ; used for drawing map
@@ -66,6 +73,9 @@ AnimationTimer ds 4 ; animation timer for p0, p1, m0, m1
 PreviousX ds 4
 PreviousY ds 4
 
+; used by Random for an 8 bit random number
+Rand8 ds 1
+
 	; ---------- Constants
 
 	SEG.U constants
@@ -76,6 +86,11 @@ TIMETOCHANGE = 20 ; speed of animation
     ; scanlines so actual height is 180 = 90*2
 PFHEIGHT = 89 ; 180 scanlines of playfield h
 NULL = 0 ; just 0
+P0STARTX = $4D
+P0STARTY = $32
+P1STARTX = 0
+P1STARTY = 0
+BallHeight = 8
 
 ;===============================================================================
 ; Define Start of Cartridge
@@ -83,7 +98,7 @@ NULL = 0 ; just 0
 
 	SEG CODE ; define code segment
 ; ----------
-	ORG $F000 ; 4k carts start at $F000
+	ORG $F800 ; 4k carts start at $F000
 
 Reset
 	; clear all ram and registers
@@ -96,21 +111,24 @@ Clear
 
 	; Init, run once only!
 
+	; seed the random number generator
+	lda INTIM       ; unknown value
+	sta Rand8       ; use as seed
+	eor #$FF        ; both seed values cannot be 0, so flip the bits
+
 	; set up srptie pos
 	ldx #0
 
 	; reset lives, map and level to 0
-	stx Lives
-	stx Level
 	stx CurrentMap
 
-	ldx #15
-	stx ObjectX
-  ldx #12
-  stx ObjectX+1
-  ldy #$30
-  sty ObjectY
-  sty ObjectY+1
+	ldx #5
+	stx Lives ; 5 lives
+	jsr NextLevel
+
+	jsr ResetPPositions
+
+	jsr SetBallPosition
 
 	jsr PlayIntroSong
 
@@ -142,6 +160,10 @@ VerticalSync
 	sta GRP0
 	sta WSYNC
 	sta VSYNC
+
+	lda #$30    ;
+  sta NUSIZ0  ; set missile0 to be 8x
+	sta NUSIZ1
 Sleep12 ; jsr here to sleep for 12 cycles
 	rts
 
@@ -266,6 +288,15 @@ DoDrawGrp0 ;
 	; restore y
 	ldy Temp+1
 
+	; ball stuff
+	ldx #1 ; d1=0 so ball will be off
+	lda #BallHeight-1 ; height of ball gfx
+	dcp BallDraw ; decrement and compare
+	bcs DoEnableBall
+	.byte $24
+DoEnableBall
+	inx ; d1=1 so ball will be on
+
 	; precalculate date for next line
 	lda #TURTLEHEIGHT-1 ; height of gfx
 	dcp BirdDraw ; decrement BirdDraw
@@ -277,7 +308,7 @@ DoDrawGrp1
 	sta WSYNC
 	; start of line 2 of the 2LK
 	sta GRP1
-
+	stx ENABL ; enable ball
 	dey ; decrease the loop counter
 	bne pfLoop ; branch if more left to draw
 
@@ -386,7 +417,77 @@ Player2DownNotPressed
 Player2UpNotPressed
 	rts
 
+; this sub handles the bird AI
 BirdAI
+	ldx #0
+	cpx BirdAICounter
+	bne MoveBirdAI ; jump to keep doing what we are doing
+	; first we call Random to determine which direction bird moves
+	jsr Random
+	; if random is even move left, else right
+	lda #1 ; bit mask
+	and Rand8
+	beq EvenLeftRightBirdAI; is even
+
+	; odd bird AI
+	ldx #0
+	stx BirdLeftRightStatus
+	jmp LeftRightBirdAIDone
+	; even bird AI
+EvenLeftRightBirdAI
+	ldx #1
+	stx BirdLeftRightStatus
+LeftRightBirdAIDone
+
+	jsr Random
+	; if random is even move up, else down
+	lda #1 ; bit mask
+	and Rand8
+	beq EvenBirdUpDownBirdAI; is even
+
+	; odd
+	ldx #0
+	stx BirdUpDownStatus
+	jmp UpDownBirdAIDone
+ 	; even
+EvenBirdUpDownBirdAI
+	ldx #1
+	stx BirdUpDownStatus
+UpDownBirdAIDone
+	ldx #20 ; bird ai will follow this pattern for 20 frames
+	stx BirdAICounter
+
+MoveBirdAI
+	dec BirdAICounter
+	; now we check where to move bird
+	ldx #1
+	cpx BirdUpDownStatus
+	beq MoveBirdUp
+
+	; odd bird AI
+	ldy #1
+	ldx #2
+	jsr MoveObject
+	jmp UpDownBirdMoveDone
+MoveBirdUp
+	ldy #1
+	ldx #3
+	jsr MoveObject
+UpDownBirdMoveDone
+
+	ldx #1
+	cpx BirdLeftRightStatus
+	beq MoveBirdLeft
+	; move right
+	ldy #1
+	ldx #0
+	jsr MoveObject
+	jmp leftRightBirdMoveDone
+MoveBirdLeft
+	ldy #1
+	ldx #1
+	jsr MoveObject
+leftRightBirdMoveDone
 	rts
 
 ;====================
@@ -402,7 +503,7 @@ BirdAI
 ; 2 = bird collision
 ; 3 = missile collision
 ;====================
-MoveObject ; for some reason the first frame of collision does not detect?
+MoveObject
 	cpx #0
 	beq RightCollision
 	cpx #1
@@ -494,23 +595,43 @@ NoP0PFCollision
 	bit CXPPMM
 	bpl NoP0P1Collision
 	dec Lives ; kill p0
+	lda #0 ; if lives is 0 - reset the game
+	cmp Lives
+	bne NoReset
+	jmp Reset
+NoReset
+	jsr ResetPPositions
 NoP0P1Collision ; p0 and p1 did not collide!
+
+	; now we dio p0 m0 collision. m0 must be collected by turtle to advance
+	; each time collision happens m0 will get a new position
+	bit CXP0FB
+	bvc NoP0BallCollision
+
+	stx Score
+	cpx Score
+	beq NoP0BallCollision ; prevent underflow!
+	; dec score. if screen is left and score is 0 continue
+	dec Score
+	jsr SetBallPosition ; new position for m0
+NoP0BallCollision
+	; now we check if m0 is in a wall
+	bit CXBLPF
+	beq NoBallPFCollision ; if it is reloacte
+	jsr SetBallPosition
+NoBallPFCollision
+	; now we check if ball is oob
+	ldx ObjectX+2
+	cpx #160
+	bpl BallNotOOB ; if smaller do nothing
+	ldx ObjectY+2
+	cpx 255
+	bpl BallNotOOB
+	jsr SetBallPosition
+BallNotOOB
 CollisionDone
 	lda #1
 	sta CXCLR ; clear collision
-	rts
-
-PlayerCollision
-	; now we do special case collision
-	; first collision between p1 and p0
-	ldx Temp ; x must be 1 if p1 and p0 collided
-	cpx #1
-	bne NoPlayerCollision
-
-	; if player is hit by bird remove a life
-	dec Lives
-
-NoPlayerCollision
 	rts
 
 ; Plays the Intro noise
@@ -532,6 +653,38 @@ ClearSong
 	sta AUDV0
 	rts
 
+SetBallPosition
+	jsr Random
+	;ldx Rand8
+	ldx #10
+	stx ObjectX+2
+	jsr Random
+	;ldx Rand8
+	ldx #10
+	stx ObjectY+2
+	rts
+
+ResetPPositions
+	ldx #P0STARTX
+	stx ObjectX
+	ldy #P0STARTY
+	sty ObjectY
+
+	ldx P1STARTX
+	stx ObjectX+1
+	ldx P1STARTY
+	stx ObjectY+1
+	rts
+
+NextLevel
+	inc Level
+	inc Lives
+	lda #3
+	adc Level
+	; score is 3 + level
+	sta Score
+	rts
+
 SetObjectColours
 	ldx #3 ; we're going to set 4 colours
 	ldy #3 ;
@@ -549,9 +702,11 @@ SOCloop
 
 PrepScoreForDisplay
 	; for testing purposes, change the values in Timer and Score
-	inc Timer ; inc timer by 1
-	bne PSFDskip ; branch if not 0
-	inc Score ; inc score by 1 if Timer just rolled to 0
+	; inc Timer ; inc timer by 1
+	; bne PSFDskip ; branch if not 0
+	; inc Score ; inc score by 1 if Timer just rolled to 0
+	ldx Lives
+	stx Timer
 PSFDskip
 	ldx #1 ; use x as the loop counter for PSFDloop
 PSFDloop
@@ -576,7 +731,7 @@ PSFDloop
 	rts
 
 PositionObjects
-	ldx #1 ; position objects 0-1: player0 and player1
+	ldx #3 ; position objects 0-1: player0 and player1 and m0
 POloop
 	lda ObjectX,x       ; get the object's X position
 	jsr PosObject       ; set coarse X position and fine-tune amount
@@ -676,20 +831,35 @@ BirdFrame2
 	lda #0
 	sta AnimationTimer+1
 
+	; prep balls y position
+	ldx #1 ; preload X for setting VDELBL
+	lda ObjectY+2 ; get the balls's Y position
+	clc
+	adc #1 ; add 1 to compensate for priming of ball
+	lsr ; divide by 2 for the 2LK position
+	sta Temp ; save for position calculations
+	bcs NoDelayBL ; if carry is set we don't need Vertical Delay
+	stx VDELBL ; carry was clear, so set Vertical Delay
+
+NoDelayBL
+	lda #(PFHEIGHT + BallHeight + 1)
+	sec
+	sbc Temp
+	sta BallDraw
 RenderDone
 	; use Difficulty Switches to test how Vertical Delay works
-	ldx #0
-	stx VDELP0      ; turn off VDEL for player0
-	stx VDELP1      ; turn off VDEL for player1
-	inx
-	bit SWCHB       ; state of Right Difficult in N (negative flag)
+	;ldx #0
+	;stx VDELP0      ; turn off VDEL for player0
+	;stx VDELP1      ; turn off VDEL for player1
+	;inx
+	;bit SWCHB       ; state of Right Difficult in N (negative flag)
 									; state of Left Difficult in V (overflow flag)
-	bvc LeftIsB
-	stx VDELP0      ; Left is A, turn on VDEL for player0
-LeftIsB
-	bpl RightIsB
-	stx VDELP1      ; Right is A, turn on VDEL for player1
-RightIsB
+	;bvc LeftIsB
+	;stx VDELP0      ; Left is A, turn on VDEL for player0
+;LeftIsB
+	;bpl RightIsB
+	;stx VDELP1      ; Right is A, turn on VDEL for player1
+;RightIsB
 	rts
 
 	;===============================================================================
@@ -722,6 +892,22 @@ DivideLoop
 	sta RESP0,X    ; 4 23 - set coarse X position of object
 	rts            ; 6 29
 
+;===============================================================================
+; This routine returns a random number based on the last value of Rand8
+; Expected inputs:
+; none
+; Returns: A 8-bit random number in Rand8
+;===============================================================================
+Random
+	lda Rand8
+	lsr
+	bcc noeor
+	eor #$B4
+noeor
+	sta Rand8
+	rts
+
+#if SYSTEM = NTSC
 Colours:
 	.byte $C6   ; green      - goes into COLUP0, color for player1 and missile0
 	.byte $86   ; blue       - goes into COLUP1, color for player0 and missile1
@@ -731,6 +917,19 @@ Colours:
 	.byte $06   ; dark grey  - goes into COLUP1, B&W for player1 and missile1
 	.byte $0A   ; light grey - goes into COLUPF, B&W for playfield and ball
 	.byte $00   ; black      - goes into COLUBK, B&W for background
+#endif
+
+#if SYSTEM = PAL
+Colours:
+	.byte $3A   ; green      - goes into COLUP0, color for player1 and missile0
+	.byte $B4   ; blue       - goes into COLUP1, color for player0 and missile1
+	.byte $66   ; red        - goes into COLUPF, color for playfield and ball
+	.byte $00   ; black      - goes into COLUBK, color for background
+	.byte $0E   ; white      - goes into COLUP0, B&W for player0 and missile0
+	.byte $14   ; dark grey  - goes into COLUP1, B&W for player1 and missile1
+	.byte $1A   ; light grey - goes into COLUPF, B&W for playfield and ball
+	.byte $00   ; black      - goes into COLUBK, B&W for background
+#endif
 
 ; Sprite data
 TurtleSprite:
