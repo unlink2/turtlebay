@@ -1,1 +1,7 @@
 bin/
+tools/png2bin/bin
+tools/png2bin/lib
+tools/png2bin/obj
+tools/png2bin/src/include/*.gch
+tools/png2bin/src/*.txt
+tools/png2bin/*.sprite
