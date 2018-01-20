@@ -13,6 +13,10 @@
 ; when bird is hit it loses control for a few frames and is pushed back
 ; collision detection based on just a few sample pixels. edges and center of edges?
 ; and the current x and y position
+; each ball collection will reduce score by 1, when score is 0 -> go to next map and reduce lvl counter
+; load a new random map
+; TODO fix ball
+; make ball change positon after 10 seconds
 
 PAL = 0
 NTSC = 1
@@ -40,20 +44,19 @@ TimerGfx ds 1
 Temp ds 4 ; 4 bytes of temp storage
 
 ; object X positions in $89-8C
-ObjectX:        ds 4    ; player0, player1, missile0, missile1
+ObjectX:        ds 5    ; player0, player1, missile0, missile1, ball
 
 ; object Y positions in $8D-90
-ObjectY:        ds 4    ; player0, player1, missile0, missile1
+ObjectY:        ds 5    ; player0, player1, missile0, missile1, ball
 
 ; DoDraw storage in $91-92
 TurtleDraw:      ds 1    ; used for drawing player0
 BirdDraw:        ds 1    ; used for drawing player1
-BallDraw: ds 1
+M0Draw: ds 1
 
 ; DoDraw Graphic Pointer in $93-94
 TurtlePtr:       ds 2    ; used for drawing player0
 BirdPtr:         ds 2    ; used for drawing player1
-M0Ptr: ds 2
 
 ; used for Bird AI to keep track of movement
 BirdAICounter ds 1
@@ -67,11 +70,14 @@ MapPtr2:         ds 2    ; used for drawing map
 CurrentMap: ds 1 ; map counter - must increment by 6 for new map to fully load
 Lives: ds 1 ; live counter
 Level: ds 1 ; level counter
+MapsCleared: ds 1 ; amount of clreaded maps this level
 
 AnimationTimer ds 4 ; animation timer for p0, p1, m0, m1
 
 PreviousX ds 4
 PreviousY ds 4
+
+M0RespawnTimer ds 1 ; ball will change location after x secnds (each time framecount rolls over this is dec)
 
 ; used by Random for an 8 bit random number
 Rand8 ds 1
@@ -90,7 +96,8 @@ P0STARTX = $4D
 P0STARTY = $32
 P1STARTX = 0
 P1STARTY = 0
-BallHeight = 8
+M0HEIGHT = 8
+M0RESPAWNT = 255
 
 ;===============================================================================
 ; Define Start of Cartridge
@@ -124,17 +131,31 @@ Clear
 
 	ldx #5
 	stx Lives ; 5 lives
+	jsr NextMap
 	jsr NextLevel
 
 	jsr ResetPPositions
 
-	jsr SetBallPosition
+	jsr SetM0Pos
 
 	jsr PlayIntroSong
 
 StartOfFrame
 	; start of new frame
 	inc FRAMECOUNT
+	; compare framecount to 0
+	ldx FRAMECOUNT
+	cpx #0
+	bne FramesNotRolledOver
+	dec M0RespawnTimer ; dec this if rolled over
+
+	; compare to 0
+	ldx M0RespawnTimer
+	cpx #0
+	bne FramesNotRolledOver
+	; reset ball
+	jsr SetM0Pos
+FramesNotRolledOver
 	jsr VerticalSync
 	jsr VerticalBlank
 	jsr Picture
@@ -170,6 +191,7 @@ Sleep12 ; jsr here to sleep for 12 cycles
 VerticalBlank
 	; game logic call
 	jsr ProcessJoystick
+	jsr GameProgress
 	jsr PositionObjects
 	jsr SetObjectColours
 	jsr PrepScoreForDisplay
@@ -290,11 +312,11 @@ DoDrawGrp0 ;
 
 	; ball stuff
 	ldx #1 ; d1=0 so ball will be off
-	lda #BallHeight-1 ; height of ball gfx
-	dcp BallDraw ; decrement and compare
-	bcs DoEnableBall
+	lda #M0HEIGHT-1 ; height of m0 gfx
+	dcp M0Draw ; decrement and compare
+	bcs DoEnableM0
 	.byte $24
-DoEnableBall
+DoEnableM0
 	inx ; d1=1 so ball will be on
 
 	; precalculate date for next line
@@ -308,7 +330,7 @@ DoDrawGrp1
 	sta WSYNC
 	; start of line 2 of the 2LK
 	sta GRP1
-	stx ENABL ; enable ball
+	stx ENAM0 ; enable m0
 	dey ; decrease the loop counter
 	bne pfLoop ; branch if more left to draw
 
@@ -490,6 +512,25 @@ MoveBirdLeft
 leftRightBirdMoveDone
 	rts
 
+GameProgress
+	; first we check if required maps for next level have been reached
+	ldx Level
+	inx ; maps for level are always Level+1
+	cpx MapsCleared ; if it is the same next level
+	beq NextLevelProg
+	ldx Score
+	cpx #0 ; if score is 0 advance to the next stage
+	beq NextMapProg
+
+	jmp ProgressDone
+NextMapProg
+	jsr NextMap
+	jmp ProgressDone
+NextLevelProg
+	jsr NextLevel
+ProgressDone
+	rts
+
 ;====================
 ; This sub checks for collision based on inputs stored
 ; Expected inputs:
@@ -605,30 +646,22 @@ NoP0P1Collision ; p0 and p1 did not collide!
 
 	; now we dio p0 m0 collision. m0 must be collected by turtle to advance
 	; each time collision happens m0 will get a new position
-	bit CXP0FB
-	bvc NoP0BallCollision
+	bit CXM0P
+	bvc NoP0M0Collision
 
-	stx Score
-	cpx Score
-	beq NoP0BallCollision ; prevent underflow!
+	ldx Score
+	cpx #0
+	beq NoP0M0Collision ; prevent underflow!
 	; dec score. if screen is left and score is 0 continue
-	dec Score
-	jsr SetBallPosition ; new position for m0
-NoP0BallCollision
+	dex
+	stx Score
+	jsr SetM0Pos ; new position for m0
+NoP0M0Collision
 	; now we check if m0 is in a wall
-	bit CXBLPF
-	beq NoBallPFCollision ; if it is reloacte
-	jsr SetBallPosition
-NoBallPFCollision
-	; now we check if ball is oob
-	ldx ObjectX+2
-	cpx #160
-	bpl BallNotOOB ; if smaller do nothing
-	ldx ObjectY+2
-	cpx 255
-	bpl BallNotOOB
-	jsr SetBallPosition
-BallNotOOB
+	bit CXM0FB
+	bvc NoM0PFCollision ; if it is reloacte
+	jsr SetM0Pos
+NoM0PFCollision
 CollisionDone
 	lda #1
 	sta CXCLR ; clear collision
@@ -653,15 +686,57 @@ ClearSong
 	sta AUDV0
 	rts
 
-SetBallPosition
-	jsr Random
-	;ldx Rand8
-	ldx #10
-	stx ObjectX+2
-	jsr Random
-	;ldx Rand8
-	ldx #10
-	stx ObjectY+2
+SetM0Pos
+	ldx 2
+	jsr RandomLocation
+	lda #M0RESPAWNT ; load ball respawn time
+	; dec level from that
+	clc
+	sbc Level
+	sta M0RespawnTimer
+	rts
+
+	;===============================================================================
+	; RandomLocation
+	; --------------
+	; call with X to set to the object to randomly position:
+	;   1 - player1
+	;   2 - missile0
+	;   3 - missile1
+	;   4 - ball
+	;
+	; X position
+	; ----------
+	; There are 160 pixels across the screen.  There's also a border that takes up
+	; 4 pixels on each side, plus the player objects span 8 pixels.  That gives us
+	; a range of 160 - 4*2 - 8 = 144 possible positions to place an object.  Due to
+	; due to the Arena border we need to shift that 4 to the right so the X position
+	; can be anything from 4-148.
+	;
+	; Y position
+	; ----------
+	; Y position needs to be between 25-169
+	;===============================================================================
+RandomLocation:
+	jsr Random      ; get a random value between 0-255
+	and #127        ; limit range to 0-127
+	sta Temp        ; save it
+	jsr Random      ; get a random value between 0-255
+	and #15         ; limit range to 0-15
+	clc             ; must clear carry for add
+	adc Temp        ; add in random # from 0-127 for range of 0-142
+	adc #5          ; add 5 for range of 5-147
+	sta ObjectX,x   ; save the random X position
+
+	jsr Random      ; get a random value between 0-255
+	and #127        ; limit range to 0-127
+	sta Temp        ; save it
+	jsr Random      ; get a random value between 0-255
+	and #15         ; limit range to 0-15
+	clc             ; must clear carry for add
+	adc Temp        ; add in random # from 0-127 for range of 0-142
+	adc #26         ; add 26 for range of 26-168
+	sta ObjectY,x   ; save the random Y position
 	rts
 
 ResetPPositions
@@ -679,6 +754,16 @@ ResetPPositions
 NextLevel
 	inc Level
 	inc Lives
+	lda #3
+	adc Level
+	; score is 3 + level
+	sta Score
+	ldx #0
+	stx MapsCleared
+	rts
+
+NextMap
+	inc MapsCleared
 	lda #3
 	adc Level
 	; score is 3 + level
@@ -731,7 +816,7 @@ PSFDloop
 	rts
 
 PositionObjects
-	ldx #3 ; position objects 0-1: player0 and player1 and m0
+	ldx #2 ; position objects 0-1: player0 and player1 and m0
 POloop
 	lda ObjectX,x       ; get the object's X position
 	jsr PosObject       ; set coarse X position and fine-tune amount
@@ -808,7 +893,7 @@ BirdFrame1
 	lda #>(BirdSprite + BIRDHEIGHT - 1)
 	sbc #0
 	sta BirdPtr+1
-	jmp RenderDone
+	jmp BallRender
 BirdFrame2
 	; BirdDraw = PFHEIGHT + BIRDHEIGHT - Y position
 	lda #(PFHEIGHT + BIRDHEIGHT2)
@@ -827,25 +912,23 @@ BirdFrame2
 
 	ldx AnimationTimer+1
 	cpx #20 ; compare to 10 if 10 reset to 0
-	bne RenderDone
+	bne BallRender
 	lda #0
 	sta AnimationTimer+1
 
-	; prep balls y position
-	ldx #1 ; preload X for setting VDELBL
-	lda ObjectY+2 ; get the balls's Y position
-	clc
-	adc #1 ; add 1 to compensate for priming of ball
-	lsr ; divide by 2 for the 2LK position
-	sta Temp ; save for position calculations
-	bcs NoDelayBL ; if carry is set we don't need Vertical Delay
-	stx VDELBL ; carry was clear, so set Vertical Delay
-
+BallRender
+	ldx #1
+	lda ObjectY+2
+	lsr
+	sta Temp
+	bcs NoDelayBL
+	stx VDELBL
 NoDelayBL
-	lda #(PFHEIGHT + BallHeight + 1)
+	; prep m0 y position
+	lda #(PFHEIGHT + M0HEIGHT)
 	sec
 	sbc Temp
-	sta BallDraw
+	sta M0Draw
 RenderDone
 	; use Difficulty Switches to test how Vertical Delay works
 	;ldx #0
