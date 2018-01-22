@@ -15,6 +15,8 @@
 ; and the current x and y position
 ; each ball collection will reduce score by 1, when score is 0 -> go to next map and reduce lvl counter
 ; load a new random map
+; maybe even randomize each part of the map?
+; at a certain level make it so that bird duplicates
 ; TODO fix ball
 ; make ball change positon after 10 seconds
 
@@ -67,7 +69,8 @@ BirdUpDownStatus ds 1
 MapPtr0:         ds 2    ; used for drawing map
 MapPtr1:         ds 2    ; used for drawing map
 MapPtr2:         ds 2    ; used for drawing map
-CurrentMap: ds 1 ; map counter - must increment by 6 for new map to fully load
+; map counter for each PF, currently all of those are the same
+CurrentMap: ds 3 ; map counter - must increment by 6 for new map to fully load
 Lives: ds 1 ; live counter
 Level: ds 1 ; level counter
 MapsCleared: ds 1 ; amount of clreaded maps this level
@@ -80,6 +83,18 @@ PreviousY ds 4
 M0RespawnTimer ds 1 ; ball will change location after x secnds (each time Framecount rolls over this is dec)
 GameState ds 1 ; gamestate. 0 = playing 1 = intro 2 = ocean reached animation
 ColourCycle ds 1 ; used for pause screen
+
+; Music Pointers
+; these point to memory locations that are to be played when music is on
+; music should be input in reverse order because of the way the counter works!
+SoundEnabled ds 1 ; set to how many frames are to be played
+SoundTrackPtr ds 2 ; points to sound to be played
+SoundVolumePtr ds 2 ; points to volume for the track
+
+NoiseEnabled ds 1 ; set to amount of frames to play noise
+NoiseTrackPtr ds 2 ; points to noise to be played
+NoiseVolumePtr ds 2 ; points to volume for the track
+
 ; used by Random for an 8 bit random number
 Rand8 ds 1
 
@@ -143,8 +158,6 @@ Reset
 
 	jsr SetM0Pos
 
-	jsr PlayIntroSong
-
 StartOfFrame
 	; start of new frame
 	inc Framecount
@@ -190,7 +203,23 @@ VerticalSync
 
 	lda #%00100000    ;
   sta NUSIZ0  ; set missile0 to be 2x
+
+	; if the level is greater than 0x10 doulbe the bird
+	ldx Level
+	cpx #$10
+	beq DoubleBird
+	cpx #$FF
+	beq TrippleBird
+	jmp BirdDifficultyDone
+DoubleBird
+	lda #%00000001 ; 2 closely rendered copies
 	sta NUSIZ1
+	jmp BirdDifficultyDone
+TrippleBird
+	lda #%00000011 ; 3 closely rendered copies
+	sta NUSIZ1
+	jmp BirdDifficultyDone
+BirdDifficultyDone
 Sleep12 ; jsr here to sleep for 12 cycles
 	rts
 
@@ -201,6 +230,8 @@ VerticalBlank
 	jsr PositionObjects
 	jsr SetObjectColours
 	jsr PrepScoreForDisplay
+	jsr NoiseHandle
+	jsr SoundHandle
 	rts
 
 Picture
@@ -267,11 +298,13 @@ scoreLoop
 	lda RoomTable+1,x ;
 	sta MapPtr0+1 ; store the rest in MapPtr+1
 
+	ldx CurrentMap+1
 	lda RoomTable+2,x ; store room1layout in MapPtr as a ptr
 	sta MapPtr1
 	lda RoomTable+3,x ;
 	sta MapPtr1+1 ; store the rest in MapPtr+1
 
+	ldx CurrentMap+2
 	lda RoomTable+4,x ; store room1layout in MapPtr as a ptr
 	sta MapPtr2
 	lda RoomTable+5,x ;
@@ -675,6 +708,7 @@ NoP0PFCollision
 NoReset
 	jsr ResetPPositions
 	jsr SetM0Pos
+	jsr PlayBirdHitPlayerSong
 NoP0P1Collision ; p0 and p1 did not collide!
 
 	; now we dio p0 m0 collision. m0 must be collected by turtle to advance
@@ -689,6 +723,7 @@ NoP0P1Collision ; p0 and p1 did not collide!
 	dex
 	stx Score
 	jsr SetM0Pos ; new position for m0
+	jsr FoodCollectedSong
 NoP0M0Collision
 	; now we check if m0 is in a wall
 	bit CXM0FB
@@ -700,15 +735,61 @@ CollisionDone
 	sta CXCLR ; clear collision
 	rts
 
+NoiseHandle
+	ldx NoiseEnabled
+	cpx #0 ; if it is 0, clear song and return
+	beq ClearNoiseSet
+	jsr Noise ; else we call sound
+	rts
+ClearNoiseSet
+	jsr ClearNoise
+	rts
+
 ; Plays the Intro noise
-PlayIntroSong
-	lda #2
-	sta AUDC0
+SoundHandle
+	ldx SoundEnabled
+	cpx #0 ; if it is 0, clear song and return
+	beq ClearSongSet
+	jsr Sound ; else we call sound
+	rts
+ClearSongSet
+	jsr ClearSong
+	rts
+
+Noise
+	ldy SoundEnabled
+	sty AUDC1
+	lda (NoiseTrackPtr),y
+	sta AUDF1
+
+	ldy 0
+	lda (NoiseVolumePtr),y
+	sta AUDV1
+
+	; dec every 2nd frame
+	lda Framecount
+	and #1
+	beq DoNotDecNoise
+	dec NoiseEnabled
+DoNotDecNoise
+	rts
+
+Sound
+	ldy SoundEnabled
+	sty AUDC0
+	lda (SoundTrackPtr),y
 	sta AUDF0
+
+	ldy 0
+	lda (SoundVolumePtr),y
 	sta AUDV0
 
-	jsr ClearSong
-
+	; dec every 2nd frame
+	lda Framecount
+	and #1
+	beq DoNotDecSound
+	dec SoundEnabled
+DoNotDecSound
 	rts
 
 ClearSong
@@ -717,6 +798,43 @@ ClearSong
 	sta AUDC0
 	sta AUDF0
 	sta AUDV0
+	rts
+
+ClearNoise
+	lda #0
+	sta AUDC1
+	sta AUDF1
+	sta AUDV1
+	rts
+
+PlayBirdHitPlayerSong
+	lda BirdHitPlayerTrack
+	sta SoundTrackPtr
+	lda BirdHitPlayerTrack+1
+	sta SoundTrackPtr+1
+
+	lda BirdHitPlayerVolume
+	sta SoundVolumePtr
+	lda BirdHitPlayerVolume+1
+	sta SoundVolumePtr+1
+
+	lda #BIRDHITPLAYERTRACKSIZE ; 4 frames long
+	sta SoundEnabled
+	rts
+
+FoodCollectedSong
+	lda FoodCollectedTrack
+	sta SoundTrackPtr
+	lda FoodCollectedTrack+1
+	sta SoundTrackPtr+1
+
+	lda FoodCollectedVolume
+	sta SoundVolumePtr
+	lda FoodCollectedVolume+1
+	sta SoundVolumePtr+1
+
+	lda #FOODCOLLECTEDTRACKSIZE ; 4 frames long
+	sta SoundEnabled
 	rts
 
 SetM0Pos
@@ -820,6 +938,8 @@ NextMapLoop
 	dey
 	bne NextMapLoop
 	sta CurrentMap
+	sta CurrentMap+1
+	sta CurrentMap+2
 NextMapDone
 	rts
 
@@ -1402,6 +1522,10 @@ Room1LayoutPF2
 
 
 ; Table holding all the room start addresses next to each other
+; might be able to store this in 3 different tables and not have the counter
+; be a multiple of 6
+; this is not really an issue at this time because we will be able to fit
+; enough maps anyway
 RoomTable:
 	.word Room0LayoutPF0
 	.word Room0LayoutPF1
@@ -1409,6 +1533,46 @@ RoomTable:
 	.word Room1LayoutPF0
 	.word Room1LayoutPF1
 	.word Room1LayoutPF2
+
+; Sound tables
+BirdHitPlayerTrack
+	.byte $D9
+	.byte $D8
+	.byte $D7
+	.byte $D6
+	.byte $D5
+	.byte $D4
+	.byte $D3
+	.byte $D2
+	.byte $D1
+BIRDHITPLAYERTRACKSIZE = * - BirdHitPlayerTrack
+
+FoodCollectedTrack
+	.byte $78
+	.byte $79
+	.byte $7A
+	.byte $7B
+	.byte $7C
+	.byte $7D
+FOODCOLLECTEDTRACKSIZE = * - FoodCollectedTrack
+
+FoodCollectedVolume
+	.byte $02
+
+BirdHitPlayerVolume
+	.byte $09
+
+LevelClearTrack
+LEVELCLEARTRACKSIZE = * - LevelClearTrack
+
+LevelClearVolume
+	.byte $09
+
+GameOverTrack
+GAMEOVERTRACKSIZE = * - GameOverTrack
+
+GameOverVolume
+	.byte $09
 
 	;------------------------------------------------------------------------------
 
