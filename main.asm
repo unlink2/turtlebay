@@ -33,11 +33,13 @@ Framecount ds 1 ; animation counter location
 
 Score ds 1 ; holdds 2 digit score, sotred as BCD
 Timer ds 1 ;
+Level: ds 1 ; level counter
+Lives: ds 1 ; live counter
 
 ; digit graphic data
 
-DigitOnes ds 2 ; DigitiOnes = score, DigitOnes+1 = timer
-DigitTens ds 2
+DigitOnes ds 3 ; DigitiOnes = score, DigitOnes+1 = timer DigitOnes+2 = level
+DigitTens ds 3
 
 ; graphic data to be put into PF1
 ScoreGfx ds 1
@@ -71,8 +73,7 @@ MapPtr1:         ds 2    ; used for drawing map
 MapPtr2:         ds 2    ; used for drawing map
 ; map counter for each PF, currently all of those are the same
 CurrentMap: ds 3 ; map counter - must increment by 6 for new map to fully load
-Lives: ds 1 ; live counter
-Level: ds 1 ; level counter
+
 MapsCleared: ds 1 ; amount of clreaded maps this level
 
 AnimationTimer ds 4 ; animation timer for p0, p1, m0, m1
@@ -239,7 +240,11 @@ VerticalBlank
 	jsr ProcessJoystick
 	jsr GameProgress
 	jsr PositionObjects
+
+	ldx #1
+	stx Temp+3 ; score colours
 	jsr SetObjectColours
+
 	jsr PrepScoreForDisplay
 	jsr NoiseHandle
 	jsr SoundHandle
@@ -273,7 +278,6 @@ GameState2NotDone
 	stx Temp+1
 	rts
 GameStateNot2Picture
-
 	; draw score 5 lines
 	ldx #5
 scoreLoop
@@ -312,10 +316,17 @@ scoreLoop
 	dex ; decrease loop counter
 	sta PF1 ; update playfield
 	bne scoreLoop ; if dex != 0 then loop
+
 	sta WSYNC
+
 ;---------------------------------------
 	stx PF1 ; blank out PF1 - x must be zero here!
 	sta WSYNC
+
+	; restore bg colour
+	ldx #0
+	stx Temp+3 ; gameplay colours
+	jsr SetObjectColours
 
 	sta WSYNC ; space between score and arena
 
@@ -730,6 +741,18 @@ CollisionDetection
 	ldy #0 ; 0th object is player0
 	jsr RestorePos
 NoP0PFCollision
+	; now we check collision between p1 and pf only if difficulty right switch is b
+	bit SWCHB
+	bpl NoP1PFCollision ; means switch is off
+	; if it is on do collision
+	bit CXP1FB
+	bpl NoP1PFCollision
+	ldy #1 ; p1
+	jsr RestorePos
+	ldx #0
+	stx BirdAICounter ; make bird change position
+NoP1PFCollision
+
 	; now we check collision between p0 and p1
 	bit CXPPMM
 	bpl NoP0P1Collision
@@ -1014,6 +1037,7 @@ NextMapLoop
 NextMapDone
 	rts
 
+; if temp+3 is loaded with 1 then prepare for score colours
 SetObjectColours
 	; check for gamestate 2
 	ldx GameState
@@ -1021,8 +1045,6 @@ SetObjectColours
 	bne GameStateNot2Col
 
 	lda #$86 ; blue for background
-	clc
-	adc Temp
 	sta COLUBK
 	rts ; and return
 GameStateNot2Col
@@ -1033,8 +1055,14 @@ GameStateNot2Col
 	bne SOCloop ; if D3=1 then use colour
 	ldy #7 ; else b&w entries in table
 SOCloop
+	ldx Temp+3
+	cpx #1
+	beq PickScoreCol
 	lda Colours,y ; get the colour or b&w value
-
+	jmp PFColPicked
+PickScoreCol
+	lda ScoreColours,y
+PFColPicked
 	sta Temp ; store a for now
 	ldx GameState ; load gamestate to see what is happening
 	cpx #0
@@ -1069,7 +1097,7 @@ PrepScoreForDisplay
 	ldx Lives
 	stx Timer
 PSFDskip
-	ldx #1 ; use x as the loop counter for PSFDloop
+	ldx #2 ; use x as the loop counter for PSFDloop
 PSFDloop
 	lda Score,x ; load A with timer or Score
 	and #$0F ; remove the tens digit
@@ -1276,6 +1304,15 @@ Colours:
 	.byte $06   ; dark grey  - goes into COLUP1, B&W for player1 and missile1
 	.byte $0A   ; light grey - goes into COLUPF, B&W for playfield and ball
 	.byte $00   ; black      - goes into COLUBK, B&W for background
+ScoreColours:
+	.byte $29   ; green      - goes into COLUP0, color for player1 and missile0
+	.byte $9C   ; blue       - goes into COLUP1, color for player0 and missile1
+	.byte $46   ; red        - goes into COLUPF, color for playfield and ball
+	.byte $00   ; black      - goes into COLUBK, color for background
+	.byte $0E   ; white      - goes into COLUP0, B&W for player0 and missile0
+	.byte $06   ; dark grey  - goes into COLUP1, B&W for player1 and missile1
+	.byte $0A   ; light grey - goes into COLUPF, B&W for playfield and ball
+	.byte $00   ; black      - goes into COLUBK, B&W for background
 #endif
 
 #if SYSTEM = PAL
@@ -1287,6 +1324,15 @@ Colours:
 	.byte $0E   ; white      - goes into COLUP0, B&W for player0 and missile0
 	.byte $14   ; dark grey  - goes into COLUP1, B&W for player1 and missile1
 	.byte $1A   ; light grey - goes into COLUPF, B&W for playfield and ball
+	.byte $00   ; black      - goes into COLUBK, B&W for background
+ScoreColours:
+	.byte $C6   ; green      - goes into COLUP0, color for player1 and missile0
+	.byte $86   ; blue       - goes into COLUP1, color for player0 and missile1
+	.byte $46   ; red        - goes into COLUPF, color for playfield and ball
+	.byte $00   ; black      - goes into COLUBK, color for background
+	.byte $0E   ; white      - goes into COLUP0, B&W for player0 and missile0
+	.byte $06   ; dark grey  - goes into COLUP1, B&W for player1 and missile1
+	.byte $0A   ; light grey - goes into COLUPF, B&W for playfield and ball
 	.byte $00   ; black      - goes into COLUBK, B&W for background
 #endif
 
@@ -1313,16 +1359,16 @@ TurtleSprite2:
 	.byte %01000010
 TURTLEHEIGHT2 = * - TurtleSprite2
 
-TurtleDeadSprite:
-	.byte %10000001
-	.byte %01000010
-	.byte %00100100
-	.byte %00011000
-	.byte %00011000
-	.byte %00100100
-	.byte %01000010
-	.byte %10000001
-TURTLEHDEADEIGHT = * - TurtleDeadSprite
+;TurtleDeadSprite:
+;	.byte %10000001
+;	.byte %01000010
+;	.byte %00100100
+;	.byte %00011000
+;	.byte %00011000
+;	.byte %00100100
+;	.byte %01000010
+;	.byte %10000001
+;TURTLEHDEADEIGHT = * - TurtleDeadSprite
 
 BirdSprite:
 	.byte %00000000
@@ -1346,7 +1392,6 @@ BirdSprite2:
 	.byte %00100100
 BIRDHEIGHT2 = * - BirdSprite2
 
-	align 256
 DigitGfx:
 	.byte %01110111
 	.byte %01010101
@@ -1655,6 +1700,9 @@ LEVELCLEARTRACKSIZE = * - LevelClearTrack
 
 GameOverTrack
 GAMEOVERTRACKSIZE = * - GameOverTrack
+
+	; Free memory check
+	ECHO ([$FFFA-*]d), "bytes free before end of cart ($FFFA)"
 
 	;------------------------------------------------------------------------------
 
