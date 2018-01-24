@@ -89,14 +89,12 @@ ColourCycle ds 1 ; used for pause screen
 ; these point to memory locations that are to be played when music is on
 ; music should be input in reverse order because of the way the counter works!
 SoundEnabled ds 1 ; set to how many frames are to be played
+SoundEnabled2 ds 1
 SoundTrackPtr ds 2 ; points to sound to be played
-SoundVolumePtr ds 1 ; points to volume for the track
+SoundTrackPtr2 ds 2 ; points to sound to be played
 SoundSpeed ds 1 ; speed of sound
-
-NoiseEnabled ds 1 ; set to amount of frames to play noise
-NoiseTrackPtr ds 2 ; points to noise to be played
-NoiseVolumePtr ds 1 ; points to volume for the track
-NoiseSpeed ds 1 ; speed of noise
+SoundControl ds 2 ; sound control
+SoundControl2 ds 2 ; sound control
 
 ; used by Random for an 8 bit random number
 Rand8 ds 1
@@ -121,13 +119,11 @@ MAPCOUNT = 4
 OFFSETPERMAP = 6
 
 ; music volumes
-LEVELCLEARVOLUME = $09
-FOODCOLLECTEDVOLUME = $09
-BIRDHITPLAYERVOLUME = $09
 
 ; music speed
-S_HALFSPEED = $1 ; and fore very other frame
-S_QUARTERSPEED = %11111 ; and for every 4th frame
+;S_FULLSPEED = 0 ; no delay at all
+;S_HALFSPEED = $1 ; and fore very other frame
+;S_QUARTERSPEED = %11111 ; and for every 4th frame
 
 ;===============================================================================
 ; Define Start of Cartridge
@@ -247,7 +243,9 @@ VerticalBlank
 	jsr SetObjectColours
 
 	jsr PrepScoreForDisplay
-	jsr NoiseHandle
+	ldx #0 ; channel 1
+	jsr SoundHandle
+	ldx #1 ; channel 2
 	jsr SoundHandle
 	rts
 
@@ -623,8 +621,8 @@ leftRightBirdMoveDone
 
 GameProgress
 	; first we check if required maps for next level have been reached
-	ldx Level
-	inx ; maps for level are always Level+1
+	ldx Level ; maps for level are always Level
+	;inx ; maps for level are always Level+1
 	cpx MapsCleared ; if it is the same next level
 	beq NextLevelProg
 	ldx Score
@@ -792,20 +790,10 @@ CollisionDone
 	sta CXCLR ; clear collision
 	rts
 
-NoiseHandle
-	ldx NoiseEnabled
-	cpx #0 ; if it is 0, clear song and return
-	beq ClearNoiseSet
-	jsr Noise ; else we call sound
-	rts
-ClearNoiseSet
-	jsr ClearNoise
-	rts
-
 ; Plays the Intro noise
 SoundHandle
-	ldx SoundEnabled
-	cpx #0 ; if it is 0, clear song and return
+	ldy SoundEnabled,x
+	cpy #0 ; if it is 0, clear song and return
 	beq ClearSongSet
 	jsr Sound ; else we call sound
 	rts
@@ -813,101 +801,109 @@ ClearSongSet
 	jsr ClearSong
 	rts
 
-Noise
-	ldy SoundEnabled
-	sty AUDC1
-	lda (NoiseTrackPtr),y
-	sta AUDF1
-
-	lda NoiseVolumePtr
-	sta AUDV1
-
-	; dec every 2nd frame
-	lda Framecount
-	and NoiseSpeed
-	beq DoNotDecNoise
-	dec NoiseEnabled
-DoNotDecNoise
-	rts
-
 Sound
-	ldy SoundEnabled
-	sty AUDC0
+	ldy SoundEnabled,x
+	cpx #0
+	bne LoadTrackPtr2
 	lda (SoundTrackPtr),y
-	sta AUDF0
+	sta AUDF0,x
 
-	lda SoundVolumePtr
-	sta AUDV0
+
+	lda (SoundControl),y ; get the combined Control and Volume value
+	jmp TrackPtrLoaded
+LoadTrackPtr2
+	lda (SoundTrackPtr2),y
+	sta AUDF0,x
+	lda (SoundControl2),y
+TrackPtrLoaded
+
+	sta AUDV0,x ; update the Volume register
+	lsr
+	lsr
+	lsr
+	lsr ; the lower nibble is control
+	sta AUDC0,x
 
 	; dec every 2nd frame
-	lda Framecount
-	and SoundSpeed
-	beq DoNotDecSound
-	dec SoundEnabled
+	;lda Framecount
+	;and SoundSpeed
+	;beq DoNotDecSound
+	dec SoundEnabled,x
 DoNotDecSound
 	rts
 
 ClearSong
 	; song done, now we quit
 	lda #0
-	sta AUDC0
-	sta AUDF0
-	sta AUDV0
-	rts
-
-ClearNoise
-	lda #0
-	sta AUDC1
-	sta AUDF1
-	sta AUDV1
+	sta AUDC0,x
+	sta AUDF0,x
+	sta AUDV0,x
 	rts
 
 PlayBirdHitPlayerSong
-	lda BirdHitPlayerTrack
+	lda #<(BirdHitPlayerTrack)
 	sta SoundTrackPtr
-	lda BirdHitPlayerTrack+1
+	lda #>(BirdHitPlayerTrack)
 	sta SoundTrackPtr+1
 
-	lda #BIRDHITPLAYERVOLUME
-	sta SoundVolumePtr
+	;lda #BIRDHITPLAYERVOLUME
+	;sta SoundVolumePtr
 
 	lda #BIRDHITPLAYERTRACKSIZE ; 4 frames long
 	sta SoundEnabled
 
-	lda #S_HALFSPEED
-	sta SoundSpeed
+	lda #<(BirdHitPlayerControl)
+	sta SoundControl
+
+	lda #>(BirdHitPlayerControl)
+	sta SoundControl+1
+
+	;lda #S_FULLSPEED
+	;sta SoundSpeed
 	rts
 
 PlayFoodCollectedSong
-	lda FoodCollectedTrack
+	lda #<(FoodCollectedTrack)
 	sta SoundTrackPtr
-	lda FoodCollectedTrack+1
+	lda #>(FoodCollectedTrack)
 	sta SoundTrackPtr+1
 
-	lda #FOODCOLLECTEDVOLUME
-	sta SoundVolumePtr
+	;lda #FOODCOLLECTEDVOLUME
+	;sta SoundVolumePtr
 
 	lda #FOODCOLLECTEDTRACKSIZE ; 4 frames long
 	sta SoundEnabled
 
-	lda #S_HALFSPEED
-	sta SoundSpeed
+	lda #<(FoodCollectedControl)
+	sta SoundControl
+
+	lda #>(FoodCollectedControl)
+	sta SoundControl+1
+
+	;lda #S_HALFSPEED
+	;sta SoundSpeed
 	rts
 
 PlayLevelClearSong
-	lda LevelClearTrack
+	lda #<(LevelClearTrack)
 	sta SoundTrackPtr
-	lda LevelClearTrack+1
+	lda #>(LevelClearTrack)
 	sta SoundTrackPtr+1
 
-	lda #LEVELCLEARVOLUME
-	sta SoundVolumePtr
+	;lda #LEVELCLEARVOLUME
+	;sta SoundVolumePtr
 
 	lda #LEVELCLEARTRACKSIZE ; 4 frames long
 	sta SoundEnabled
 
-	lda #S_HALFSPEED
-	sta SoundSpeed
+	lda #<(LevelClearControl)
+	sta SoundControl
+
+	lda #>(LevelClearControl)
+	sta SoundControl+1
+
+	;lda #S_HALFSPEED
+	;sta SoundSpeed
 	rts
 
 SetM0Pos
@@ -1294,6 +1290,9 @@ Random
 noeor
 	sta Rand8
 	rts
+
+	; Free memory check
+	ECHO ([$FFFA-*]d), "bytes free before end data segment ($FFFA)"
 
 #if SYSTEM = NTSC
 Colours:
@@ -1826,43 +1825,30 @@ RoomTable:
 ROOMTABLESIZE = * - RoomTable
 
 ; Sound tables
+; frequencies in order
 BirdHitPlayerTrack
-	.byte $D9
-	.byte $D8
-	.byte $D7
-	.byte $D6
-	.byte $D5
-	.byte $D4
-	.byte $D3
-	.byte $D2
-	.byte $D1
-BIRDHITPLAYERTRACKSIZE = * - BirdHitPlayerTrack
+	.byte 0, 31, 29, 27, 25, 23, 21, 19, 17, 15, 13, 11
+BIRDHITPLAYERTRACKSIZE = * - BirdHitPlayerTrack-1
+
+ ; the control tables hold the control instrumnet in the first number and the volume in the 2nd
+BirdHitPlayerControl
+	.byte 0, $8F, $8F, $8F, $8F, $8F, $8F, $8F, $8F, $8F, $8F, $8F
 
 FoodCollectedTrack
-	.byte $78
-	.byte $79
-	.byte $7A
-	.byte $7B
-	.byte $7C
-	.byte $7D
-FOODCOLLECTEDTRACKSIZE = * - FoodCollectedTrack
+	.byte 0, 26, 25, 24, 25, 26
+FOODCOLLECTEDTRACKSIZE = * - FoodCollectedTrack-1
+
+FoodCollectedControl
+	.byte 0, $1B, $1C, $4D, $4E, $4F
 
 LevelClearTrack
-	.byte $0F
-	.byte $0F
-	.byte $0F
-	.byte $0F
-	.byte $0F
-	.byte $0F
-	.byte $0F
-	.byte $0F
-	.byte $0F
-	.byte $0F
-	.byte $0F
-LEVELCLEARTRACKSIZE = * - LevelClearTrack
+	.byte 0, 21, 21, 22, 22, 23, 23, 20, 20, 21, 21, 22, 22, 19, 19, 20, 20, 21, 21
+LEVELCLEARTRACKSIZE = * - LevelClearTrack-1
 
-GameOverTrack
-GAMEOVERTRACKSIZE = * - GameOverTrack
+LevelClearControl
+	.byte 0, $4F, $4F, $4F, $4F, $4F, $4F, $4F, $4F, $4F, $4F
+	.byte $4F, $4F, $4F, $4F, $4F, $4F, $4F, $4F, $4F, $4F
+
 
 	; Free memory check
 	ECHO ([$FFFA-*]d), "bytes free before end of cart ($FFFA)"
