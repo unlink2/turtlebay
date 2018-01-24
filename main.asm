@@ -672,7 +672,7 @@ SaveXRight
 	stx ObjectX,y
 	ldx #1
 	stx REFP0,y ; makes turtle image face right
-	jmp MoveDone
+	rts;jmp MoveDone
 LeftCollision
 	; left pressed code
 	ldx ObjectX,y
@@ -684,24 +684,24 @@ SaveXLeft
 	stx ObjectX,y
 	ldx #0
 	stx REFP0,y ; makes turtle image face left
-	jmp MoveDone
+	rts;jmp MoveDone
+DownCollision
+	; up pressed code
+	ldx ObjectY,y
+	inx
+	cpx #PFHEIGHT+1 ; used to be $60 - works with $FF too because this is the edge of the screen
+	bne SaveYUp
+	ldx #0
+SaveYUp
+	stx ObjectY,y
+	rts;jmp MoveDone
 UpCollision
 	; down pressed code
 	ldx ObjectY,y
 	dex
-	cpx #255
-	bne SaveYUp
-	ldx #PFHEIGHT
-SaveYUp
-	stx ObjectY,y
-	jmp MoveDone
-DownCollision
-	; down pressed code
-	ldx ObjectY,y
-	inx
-	cpx PFHEIGHT+1
+	cpx #$FF
 	bne SaveYDown
-	ldx #0
+	ldx #PFHEIGHT
 SaveYDown
 	stx ObjectY,y
 
