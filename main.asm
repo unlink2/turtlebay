@@ -74,6 +74,8 @@ MapPtr1:         ds 2    ; used for drawing map
 MapPtr2:         ds 2    ; used for drawing map
 ; map counter for each PF, currently all of those are the same
 CurrentMap: ds 3 ; map counter - must increment by 6 for new map to fully load
+RandMap: ds 1 ; map timer, increments by one each frame until MAPCOUNT is reached
+; then resets to 0. used to get a random map
 
 MapsCleared: ds 1 ; amount of clreaded maps this level
 
@@ -170,6 +172,15 @@ Reset
 StartOfFrame
 	; start of new frame
 	inc Framecount
+	
+	ldx RandMap
+	inx
+	cpx #MAPCOUNT+1
+	bne MapCountRandNotReached
+	ldx #0
+MapCountRandNotReached
+	stx RandMap
+
 	; compare Framecount to 0
 	ldx Framecount
 	cpx #0
@@ -1013,10 +1024,11 @@ NextMap
 	;sta CurrentMap+2
 
 	; this is the old code to pick a static map
-	jsr Random
-	lda Rand8
-	and #MAPCOUNT-1 ; only allow MAPCOUNT for roll
-	tay
+	; jsr Random
+	; lda Rand8
+	; and #MAPCOUNT-1 ; only allow MAPCOUNT for roll
+	; tay
+	ldy RandMap
 	cpy #0 ; 0 does not require an offset
 	beq NextMapDone
 	;dey
