@@ -775,7 +775,10 @@ NoP1PFCollision
 NoReset
 	jsr ResetPPositions
 	jsr SetM0Pos
-	jsr PlayBirdHitPlayerSong
+
+	ldx #0 ; first song
+	ldy #BIRDHITPLAYERTRACKSIZE
+	jsr PlaySong
 NoP0P1Collision ; p0 and p1 did not collide!
 
 	; now we dio p0 m0 collision. m0 must be collected by turtle to advance
@@ -790,7 +793,10 @@ NoP0P1Collision ; p0 and p1 did not collide!
 	dex
 	stx Score
 	jsr SetM0Pos ; new position for m0
-	jsr PlayFoodCollectedSong
+
+	ldx #2 ; second song
+	ldy #FOODCOLLECTEDTRACKSIZE
+	jsr PlaySong
 NoP0M0Collision
 	; now we check if m0 is in a wall
 	bit CXM0FB
@@ -852,71 +858,25 @@ ClearSong
 	sta AUDV0,x
 	rts
 
-PlayBirdHitPlayerSong
-	lda #<(BirdHitPlayerTrack)
+; subroutine
+; inputs: x = offset in track and control table
+; y = track length
+PlaySong
+	lda #SoundTrackTable,x
 	sta SoundTrackPtr
-	lda #>(BirdHitPlayerTrack)
+	lda #SoundTrackTable+1,x
 	sta SoundTrackPtr+1
 
-	;lda #BIRDHITPLAYERVOLUME
-	;sta SoundVolumePtr
+	sty SoundEnabled
 
-	lda #BIRDHITPLAYERTRACKSIZE ; 4 frames long
-	sta SoundEnabled
-
-	lda #<(BirdHitPlayerControl)
+	lda #SoundControlTable,x
 	sta SoundControl
 
-	lda #>(BirdHitPlayerControl)
+	lda #SoundControlTable+1,x
 	sta SoundControl+1
 
-	;lda #S_FULLSPEED
-	;sta SoundSpeed
 	rts
 
-PlayFoodCollectedSong
-	lda #<(FoodCollectedTrack)
-	sta SoundTrackPtr
-	lda #>(FoodCollectedTrack)
-	sta SoundTrackPtr+1
-
-	;lda #FOODCOLLECTEDVOLUME
-	;sta SoundVolumePtr
-
-	lda #FOODCOLLECTEDTRACKSIZE ; 4 frames long
-	sta SoundEnabled
-
-	lda #<(FoodCollectedControl)
-	sta SoundControl
-
-	lda #>(FoodCollectedControl)
-	sta SoundControl+1
-
-	;lda #S_HALFSPEED
-	;sta SoundSpeed
-	rts
-
-PlayLevelClearSong
-	lda #<(LevelClearTrack)
-	sta SoundTrackPtr
-	lda #>(LevelClearTrack)
-	sta SoundTrackPtr+1
-
-	;lda #LEVELCLEARVOLUME
-	;sta SoundVolumePtr
-
-	lda #LEVELCLEARTRACKSIZE ; 4 frames long
-	sta SoundEnabled
-
-	lda #<(LevelClearControl)
-	sta SoundControl
-
-	lda #>(LevelClearControl)
-	sta SoundControl+1
-
-	;lda #S_HALFSPEED
-	;sta SoundSpeed
-	rts
 
 SetM0Pos
 	ldx 2
@@ -998,7 +958,10 @@ NextLevel
 	stx GameState
 	ldx #LEVELCLEARTRACKSIZE*2
 	stx Temp+1 ; used for frame counter for blank screen
-	jsr PlayLevelClearSong
+
+	ldx #4 ; third song
+	ldy #LEVELCLEARTRACKSIZE
+	jsr PlaySong
 	rts
 
 NextMap
@@ -1919,6 +1882,16 @@ LevelClearControl
 	.byte 0, $4F, $4F, $4F, $4F, $4F, $4F, $4F, $4F, $4F, $4F
 	.byte $4F, $4F, $4F, $4F, $4F, $4F, $4F, $4F, $4F, $4F
 
+; table holding all the needed addresses
+SoundTrackTable
+	.word BirdHitPlayerTrack
+	.word FoodCollectedTrack
+	.word LevelClearTrack
+
+SoundControlTable
+	.word BirdHitPlayerControl
+	.word FoodCollectedControl
+	.word LevelClearControl
 
 	; Free memory check
 	ECHO ([$FFFA-*]d), "bytes free before end of cart ($FFFA)"
