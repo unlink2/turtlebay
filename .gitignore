@@ -5,3 +5,4 @@ tools/png2bin/obj
 tools/png2bin/src/include/*.gch
 tools/png2bin/src/*.txt
 tools/png2bin/*.sprite
+sprdata/
