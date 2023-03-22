@@ -157,13 +157,14 @@ Reset
 	; reset lives, map and level to 0
 	stx CurrentMap
 
-	ldx #5
-	stx Lives ; 5 lives
 	jsr NextMap
 	jsr NextLevel
 
-	jsr ResetPPositions
+	ldx #2
+	stx Lives ; 2 lives
 
+	jsr ResetPPositions
+	
 	jsr SetM0Pos
 
 	ldx #1 ; only set intro state here
