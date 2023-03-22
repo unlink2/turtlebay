@@ -172,7 +172,7 @@ Reset
 StartOfFrame
 	; start of new frame
 	inc Framecount
-	
+
 	ldx RandMap
 	inx
 	cpx #MAPCOUNT+1
@@ -1885,7 +1885,7 @@ RoomTable:
 	.word Room1LayoutPF2
 	.word Room0LayoutPF2
 
-	.word Room3LayoutPF0
+	.word Room2LayoutPF0
 	.word Room1LayoutPF1
 	.word Room3LayoutPF2
 
