@@ -27,7 +27,7 @@ SYSTEM = NTSC   ; change this to PAL or NTSC
 	SEG.U vars
 	ORG $80 ; start of RAM
 
-FRAMECOUNT ds 1 ; animation counter location
+Framecount ds 1 ; animation counter location
 
 Score ds 1 ; holdds 2 digit score, sotred as BCD
 Timer ds 1 ;
@@ -77,8 +77,9 @@ AnimationTimer ds 4 ; animation timer for p0, p1, m0, m1
 PreviousX ds 4
 PreviousY ds 4
 
-M0RespawnTimer ds 1 ; ball will change location after x secnds (each time framecount rolls over this is dec)
-
+M0RespawnTimer ds 1 ; ball will change location after x secnds (each time Framecount rolls over this is dec)
+GameState ds 1 ; gamestate. 0 = playing 1 = intro 2 = ocean reached animation
+ColourCycle ds 1 ; used for pause screen
 ; used by Random for an 8 bit random number
 Rand8 ds 1
 
@@ -107,16 +108,18 @@ M0RESPAWNT = 255
 ; ----------
 	ORG $F800 ; 4k carts start at $F000
 
-Reset
+; Init, run once only!
+Start
+Clear
 	; clear all ram and registers
 	ldx #0
 	lda #0
-Clear
 	; CLEAN_START is a macro found in macro.h
   ; it sets all RAM, TIA registers and CPU registers to 0
   CLEAN_START
-
-	; Init, run once only!
+Reset
+	ldx #1 ; only set intro state here
+	stx GameState
 
 	; seed the random number generator
 	lda INTIM       ; unknown value
@@ -142,9 +145,9 @@ Clear
 
 StartOfFrame
 	; start of new frame
-	inc FRAMECOUNT
-	; compare framecount to 0
-	ldx FRAMECOUNT
+	inc Framecount
+	; compare Framecount to 0
+	ldx Framecount
 	cpx #0
 	bne FramesNotRolledOver
 	dec M0RespawnTimer ; dec this if rolled over
@@ -156,6 +159,7 @@ StartOfFrame
 	; reset ball
 	jsr SetM0Pos
 FramesNotRolledOver
+
 	jsr VerticalSync
 	jsr VerticalBlank
 	jsr Picture
@@ -359,6 +363,31 @@ overscanLoop
 	rts
 
 ProcessJoystick
+	; first we check the reset button
+	lda SWCHB
+	lsr
+	bcs ResetNotPressed ; if reset is hit, literally reset
+	jmp Start
+ResetNotPressed
+	lsr             ; D1 is now in C
+	bcs SelectNotPressed
+	ldx GameState
+	cpx #1
+	beq SelectPressedStartGame
+	lda #1
+	sta GameState ; pause game
+	jmp SelectNotPressed
+SelectPressedStartGame
+	lda #0
+	sta GameState ; game is now running
+SelectNotPressed
+	; then we check fire button, it will start/pause the game
+
+	ldx GameState ; load gamestate to see what is happening
+	cpx #0
+	beq JoystickPlaying ; playing input only
+	rts ; otherwise return now
+JoystickPlaying
 	; now we store old x and y
 	ldx ObjectX
 	stx PreviousX
@@ -771,17 +800,38 @@ NextMap
 	rts
 
 SetObjectColours
-	ldx #3 ; we're going to set 4 colours
-	ldy #3 ;
+	ldy #3 ; we're going to set 4 colours
+	; ldy #3 ;
 	lda SWCHB ; read the state of the console switches
 	and #%00001000  ; test state of D3, the TV Type switch
 	bne SOCloop ; if D3=1 then use colour
 	ldy #7 ; else b&w entries in table
 SOCloop
 	lda Colours,y ; get the colour or b&w value
-	sta COLUP0,x ; and set it
+
+	sta Temp ; store a for now
+	ldx GameState ; load gamestate to see what is happening
+	cpx #0
+	beq ColoursNotPaused
+	cpx #2
+	beq ColoursNotPaused
+	lda Framecount
+	and #%11111 ; test for every 4th frame
+	bne DoNotIncrementCCycle
+	inc ColourCycle
+DoNotIncrementCCycle
+	; if game is paused add colour variations
+	clc
+	lda Temp
+	adc ColourCycle
+	jmp PauseScreenColoursDone
+ColoursNotPaused
+	lda Temp ; restore a now
+PauseScreenColoursDone
+
+	sta COLUP0,y ; and set it
 	dey ; decrease y
-	dex ; decrease x
+
 	bpl SOCloop ; branch if positive
 	rts ; return
 
@@ -1255,7 +1305,7 @@ RoomTable:
 	; Define End of Cartridge
 	;===============================================================================
 InterruptVectors
-	.word Reset          ; NMI
-	.word Reset          ; RESET
-	.word Reset          ; IRQ
+	.word Start          ; NMI
+	.word Start          ; RESET
+	.word Start          ; IRQ
 END
