@@ -22,8 +22,9 @@
 
 PAL = 0
 NTSC = 1
+SECAM = 2
 
-SYSTEM = NTSC   ; change this to PAL or NTSC
+SYSTEM = NTSC   ; change this to PAL or NTSC or SECAM
 
 ; ---------- Variables
 	SEG.U vars
@@ -115,7 +116,7 @@ P1STARTX = 0
 P1STARTY = 0
 M0HEIGHT = 4
 M0RESPAWNT = 255
-MAPCOUNT = 4
+MAPCOUNT = 10
 OFFSETPERMAP = 6
 
 ; music volumes
@@ -1336,6 +1337,27 @@ ScoreColours:
 	.byte $00   ; black      - goes into COLUBK, B&W for background
 #endif
 
+#if SYSTEM = SECAM
+Colours:
+	.byte $3A   ; green      - goes into COLUP0, color for player1 and missile0
+	.byte $B4   ; blue       - goes into COLUP1, color for player0 and missile1
+	.byte $66   ; red        - goes into COLUPF, color for playfield and ball
+	.byte $00   ; black      - goes into COLUBK, color for background
+	.byte $0E   ; white      - goes into COLUP0, B&W for player0 and missile0
+	.byte $14   ; dark grey  - goes into COLUP1, B&W for player1 and missile1
+	.byte $1A   ; light grey - goes into COLUPF, B&W for playfield and ball
+	.byte $00   ; black      - goes into COLUBK, B&W for background
+ScoreColours:
+	.byte $C6   ; green      - goes into COLUP0, color for player1 and missile0
+	.byte $86   ; blue       - goes into COLUP1, color for player0 and missile1
+	.byte $46   ; red        - goes into COLUPF, color for playfield and ball
+	.byte $00   ; black      - goes into COLUBK, color for background
+	.byte $0E   ; white      - goes into COLUP0, B&W for player0 and missile0
+	.byte $06   ; dark grey  - goes into COLUP1, B&W for player1 and missile1
+	.byte $0A   ; light grey - goes into COLUPF, B&W for playfield and ball
+	.byte $00   ; black      - goes into COLUBK, B&W for background
+#endif
+
 ; Sprite data
 TurtleSprite:
 	.byte %10000001
@@ -1679,21 +1701,21 @@ Room2LayoutPF1:
 	.byte %00011000
 	.byte %00011000
 	.byte %00011000
-	.byte %01111110
+	.byte %00111100
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
-	.byte %01111110
+	.byte %00111100
 	.byte %00011000
 	.byte %00011000
 	.byte %00011000
 	.byte %00011000
 	.byte %00011000
-	.byte %01111110
+	.byte %00111100
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
-	.byte %01111110
+	.byte %00111100
 	.byte %00011000
 	.byte %00011000
 	.byte %00011000
@@ -1813,14 +1835,50 @@ RoomTable:
 	.word Room0LayoutPF0
 	.word Room0LayoutPF1
 	.word Room0LayoutPF2
+
 	.word Room1LayoutPF0
 	.word Room1LayoutPF1
 	.word Room1LayoutPF2
+
 	.word Room2LayoutPF0
 	.word Room2LayoutPF1
 	.word Room2LayoutPF2
+
 	.word Room3LayoutPF0
 	.word Room3LayoutPF1
+	.word Room3LayoutPF2
+
+	; mix and match room
+	.word Room2LayoutPF0
+	.word Room3LayoutPF1
+	.word Room1LayoutPF2
+
+	.word Room0LayoutPF0
+	.word Room1LayoutPF1
+	.word Room2LayoutPF2
+
+	.word Room3LayoutPF0
+	.word Room1LayoutPF2
+	.word Room0LayoutPF2
+
+	.word Room1LayoutPF0
+	.word Room3LayoutPF2
+	.word Room0LayoutPF2
+
+	.word Room0LayoutPF0
+	.word Room1LayoutPF2
+	.word Room0LayoutPF2
+
+	.word Room0LayoutPF0
+	.word Room1LayoutPF2
+	.word Room0LayoutPF2
+
+	.word Room3LayoutPF0
+	.word Room1LayoutPF1
+	.word Room3LayoutPF2
+
+	.word Room1LayoutPF0
+	.word Room3LayoutPF2
 	.word Room3LayoutPF2
 ROOMTABLESIZE = * - RoomTable
 
