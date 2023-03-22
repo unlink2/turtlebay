@@ -164,7 +164,7 @@ Reset
 	stx Lives ; 2 lives
 
 	jsr ResetPPositions
-	
+
 	jsr SetM0Pos
 
 	ldx #1 ; only set intro state here
@@ -564,6 +564,28 @@ BirdAI
 	ldx #0
 	cpx BirdAICounter
 	bne MoveBirdAI ; jump to keep doing what we are doing
+
+	bit SWCHB ; only do non-random pattern on difficulty b
+	bmi RandomBirdAI ; means switch is A
+
+	; ldx Level ; if level is smaller than 5 random moves
+	; cpx #5
+
+	; bmi RandomBirdAI ; if smaller than this jmp
+	ldx ObjectX ; player x
+	cpx ObjectX+1 ; bird x
+	bmi MoveLeftStructuredBird
+
+	ldx #0
+	stx BirdLeftRightStatus
+	jmp LeftRightBirdAIDone
+MoveLeftStructuredBird
+	ldx #1
+	stx BirdLeftRightStatus
+
+	jmp LeftRightBirdAIDone
+
+RandomBirdAI
 	; first we call Random to determine which direction bird moves
 	jsr Random
 	; if random is even move left, else right
@@ -571,6 +593,8 @@ BirdAI
 	and Rand8
 	beq EvenLeftRightBirdAI; is even
 
+
+OddLeftRightBirdAI
 	; odd bird AI
 	ldx #0
 	stx BirdLeftRightStatus
@@ -585,19 +609,25 @@ LeftRightBirdAIDone
 	; if random is even move up, else down
 	lda #1 ; bit mask
 	and Rand8
-	beq EvenBirdUpDownBirdAI; is even
+	beq EvenUpDownBirdAI; is even
 
+OddUpDownBirdAI
 	; odd
 	ldx #0
 	stx BirdUpDownStatus
 	jmp UpDownBirdAIDone
  	; even
-EvenBirdUpDownBirdAI
+EvenUpDownBirdAI
 	ldx #1
 	stx BirdUpDownStatus
 UpDownBirdAIDone
-	ldx #20 ; bird ai will follow this pattern for 20 frames
-	stx BirdAICounter
+	;lda #20 ; bird ai will follow this pattern for 20 frames
+	;clc
+	;adc Rand8
+	lda Rand8
+	clc
+	sbc Level ; bird pattern changes in Rand8 minus Level time
+	sta BirdAICounter
 
 MoveBirdAI
 	dec BirdAICounter
