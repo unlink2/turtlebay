@@ -97,8 +97,10 @@ P0STARTX = $4D
 P0STARTY = $32
 P1STARTX = 0
 P1STARTY = 0
-M0HEIGHT = 8
+M0HEIGHT = 4
 M0RESPAWNT = 255
+MAPCOUNT = 0
+OFFSETPERMAP = 6
 
 ;===============================================================================
 ; Define Start of Cartridge
@@ -186,8 +188,8 @@ VerticalSync
 	sta WSYNC
 	sta VSYNC
 
-	lda #$30    ;
-  sta NUSIZ0  ; set missile0 to be 8x
+	lda #%00100000    ;
+  sta NUSIZ0  ; set missile0 to be 2x
 	sta NUSIZ1
 Sleep12 ; jsr here to sleep for 12 cycles
 	rts
@@ -671,6 +673,7 @@ NoP0PFCollision
 	jmp Reset
 NoReset
 	jsr ResetPPositions
+	jsr SetM0Pos
 NoP0P1Collision ; p0 and p1 did not collide!
 
 	; now we dio p0 m0 collision. m0 must be collected by turtle to advance
@@ -797,6 +800,25 @@ NextMap
 	adc Level
 	; score is 3 + level
 	sta Score
+
+	; now we roll for next map
+	jsr Random
+	lda Rand8
+	and #MAPCOUNT ; only allow MAPCOUNT for roll
+	tay
+	cpy #0 ; 0 does not require an offset
+	beq NextMapDone
+
+	lda #OFFSETPERMAP
+	sta Temp
+	lda #0
+	; now add 6 for each number rolled
+NextMapLoop
+	adc Temp
+	dey
+	bne NextMapLoop
+	sta CurrentMap
+NextMapDone
 	rts
 
 SetObjectColours
@@ -1045,7 +1067,7 @@ Colours:
 	.byte $C6   ; green      - goes into COLUP0, color for player1 and missile0
 	.byte $86   ; blue       - goes into COLUP1, color for player0 and missile1
 	.byte $46   ; red        - goes into COLUPF, color for playfield and ball
-	.byte $00   ; black      - goes into COLUBK, color for background
+	.byte $EE   ; yellowish      - goes into COLUBK, color for background
 	.byte $0E   ; white      - goes into COLUP0, B&W for player0 and missile0
 	.byte $06   ; dark grey  - goes into COLUP1, B&W for player1 and missile1
 	.byte $0A   ; light grey - goes into COLUPF, B&W for playfield and ball
