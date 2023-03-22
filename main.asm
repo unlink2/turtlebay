@@ -186,13 +186,26 @@ scoreLoop
 	lda #1              ; 2  2
 	sta CTRLPF          ; 3  5 - turn off SCORE mode and turn on REFLECT
 
+	; now we load the map ptrs
 	lda #<(Room1LayoutPF0) ; store room1layout in MapPtr as a ptr
 	sta MapPtr0
 	lda #>(Room1LayoutPF0) ;
 	sta MapPtr0+1 ; store the rest in MapPtr+1
 
+	lda #<(Room1LayoutPF1) ; store room1layout in MapPtr as a ptr
+	sta MapPtr1
+	lda #>(Room1LayoutPF1) ;
+	sta MapPtr1+1 ; store the rest in MapPtr+1
+
+	lda #<(Room1LayoutPF2) ; store room1layout in MapPtr as a ptr
+	sta MapPtr2
+	lda #>(Room1LayoutPF2) ;
+	sta MapPtr2+1 ; store the rest in MapPtr+1
+
 	; Do 192 scanlines of colour-changing (our picture)
 	ldy #PFHEIGHT ; draw the screen for 192 lines
+	ldx #0
+	stx Temp ; store map counter in temp
 pfLoop
 	; continuation of line 2 of the 2LK
 	; this precalculates data that's used on line 1 of the 2LK
@@ -207,10 +220,22 @@ DoDrawGrp0 ;
 	sta WSYNC ; wait for line
 
 	sta GRP0 ; update player0 to draw turtle
-	ldx #%11111111 ; playfiled pattern test
-	stx PF0
-	;stx PF1
-	;stx PF2
+
+	; draw playfield
+	tya ; transfer y to a
+	ldy Temp ; load y with map counter
+	sta Temp ; store y for now
+
+	lda (MapPtr0),y ; playfiled pattern test
+	sta PF0
+	lda (MapPtr1),y ; playfiled pattern test
+	sta PF1
+	lda (MapPtr2),y ; playfiled pattern test
+	sta PF2
+	iny ; increment y
+	lda Temp ; load back old y
+	sty Temp ; store new map counter
+	tay ; and transfer it back
 
 	; precalculate date for next line
 	lda #TURTLEHEIGHT-1 ; height of gfx
@@ -223,12 +248,15 @@ DoDrawGrp1
 	sta WSYNC
 	; start of line 2 of the 2LK
 	sta GRP1
-	ldx #0
-	stx PF0
-	stx PF1
-	stx PF2
+
 	dey ; decrease the loop counter
 	bne pfLoop ; branch if more left to draw
+
+	lda #0
+	sta PF0
+	sta PF1
+	sta PF2
+
 	rts ; return
 
 	; 30 scanlines of overscan
@@ -391,14 +419,14 @@ TurtleFrame1
 	sta TurtleDraw
 
 	; TurtlePtr = PFHEIGHT + TURTLEHEIGHT - 1 - Y position
-	lda #<(TurtleSprite + TURTLEHEIGHT - 1)
+	lda #<(TurtleSprite + TURTLEHEIGHT - 1) ; because sprite is upside down
 	sec
 	sbc ObjectY
 	sta TurtlePtr
 	lda #>(TurtleSprite + TURTLEHEIGHT - 1)
 	sbc #0
 	sta TurtlePtr+1
-	jmp BirdFrame1
+	;jmp BirdFrame1
 
 BirdFrame1
 	; BirdDraw = PFHEIGHT + BIRDHEIGHT - Y position
@@ -461,7 +489,7 @@ DivideLoop
 	sta RESP0,X    ; 4 23 - set coarse X position of object
 	rts            ; 6 29
 
-Colours
+Colours:
 	.byte $C6   ; green      - goes into COLUP0, color for player1 and missile0
 	.byte $86   ; blue       - goes into COLUP1, color for player0 and missile1
 	.byte $46   ; red        - goes into COLUPF, color for playfield and ball
@@ -472,7 +500,7 @@ Colours
 	.byte $00   ; black      - goes into COLUBK, B&W for background
 
 ; Sprite data
-TurtleSprite
+TurtleSprite:
 	.byte %10000001
 	.byte %11000011
 	.byte %00111100
@@ -483,7 +511,7 @@ TurtleSprite
 	.byte %10000001
 TURTLEHEIGHT = * - TurtleSprite
 
-TurtleSprite2
+TurtleSprite2:
 	.byte %01000010
 	.byte %11000011
 	.byte %00111100
@@ -494,7 +522,7 @@ TurtleSprite2
 	.byte %01000010
 TURTLEHEIGHT2 = * - TurtleSprite2
 
-BirdSprite
+BirdSprite:
 	.byte %00000000
 	.byte %10011001
 	.byte %01011010
@@ -603,13 +631,111 @@ DigitGfx:
 	.byte %01000100
 	.byte %01000100
 
-; the room table holds pf information for each 1/2 scanline as a byte. 89 bytes
+; the room table holds pf information for each 1/2 scanline as a byte. 45 bytes
 ; All rooms require PF1 and PF2 tables as well
-Room1LayoutPF0
+Room1LayoutPF0:
 	.byte %11111111
 	.byte %01111100
 	.byte %01000111
 	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+Room1LayoutPF1:
+	REPEAT PFHEIGHT
+	.byte %11111111
+	REPEND
+Room1LayoutPF2:
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %01000111
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+	.byte %11111111
+	.byte %11111111
+	.byte %01111100
+
+
+; Table holding all the room start addresses next to each other
+RoomTable:
+	.word Room1LayoutPF0
+	.word Room1LayoutPF1
+	.word Room1LayoutPF2
 
 	;------------------------------------------------------------------------------
 
