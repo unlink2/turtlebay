@@ -9,6 +9,10 @@
 ; implement level counter
 ; implement lives counter
 ; implement room amount to ocean based on level
+; implement way for turtle to shoot in the direction pressed
+; when bird is hit it loses control for a few frames and is pushed back
+; collision detection based on just a few sample pixels. edges and center of edges?
+; and the current x and y position
 
 PAL = 0
 NTSC = 1
@@ -22,7 +26,7 @@ SYSTEM = NTSC   ; change this to PAL or NTSC
 FRAMECOUNT ds 1 ; animation counter location
 
 Score ds 1 ; holdds 2 digit score, sotred as BCD
-Timer ds 1
+Timer ds 1 ;
 
 ; digit graphic data
 
@@ -53,6 +57,12 @@ BirdPtr:         ds 2    ; used for drawing player1
 MapPtr0:         ds 2    ; used for drawing map
 MapPtr1:         ds 2    ; used for drawing map
 MapPtr2:         ds 2    ; used for drawing map
+CurrentMap: ds 1 ; map counter - must increment by 6 for new map to fully load
+Lives: ds 1 ; live counter
+Level: ds 1 ; level counter
+
+AnimationTimer ds 4 ; animation timer for p0, p1, m0, m1
+
 	; ---------- Constants
 
 	SEG.U constants
@@ -85,6 +95,12 @@ Clear
 
 	; set up srptie pos
 	ldx #0
+
+	; reset lives, map and level to 0
+	stx Lives
+	stx Level
+	stx CurrentMap
+
 	stx ObjectX
   ldx #8
   stx ObjectX+1
@@ -186,20 +202,23 @@ scoreLoop
 	lda #1              ; 2  2
 	sta CTRLPF          ; 3  5 - turn off SCORE mode and turn on REFLECT
 
+	; load map counter into x
+	ldx CurrentMap
+
 	; now we load the map ptrs
-	lda #<(Room1LayoutPF0) ; store room1layout in MapPtr as a ptr
+	lda RoomTable,x ; store room1layout in MapPtr as a ptr
 	sta MapPtr0
-	lda #>(Room1LayoutPF0) ;
+	lda RoomTable+1,x ;
 	sta MapPtr0+1 ; store the rest in MapPtr+1
 
-	lda #<(Room1LayoutPF1) ; store room1layout in MapPtr as a ptr
+	lda RoomTable+2,x ; store room1layout in MapPtr as a ptr
 	sta MapPtr1
-	lda #>(Room1LayoutPF1) ;
+	lda RoomTable+3,x ;
 	sta MapPtr1+1 ; store the rest in MapPtr+1
 
-	lda #<(Room1LayoutPF2) ; store room1layout in MapPtr as a ptr
+	lda RoomTable+4,x ; store room1layout in MapPtr as a ptr
 	sta MapPtr2
-	lda #>(Room1LayoutPF2) ;
+	lda RoomTable+5,x ;
 	sta MapPtr2+1 ; store the rest in MapPtr+1
 
 	; Do 192 scanlines of colour-changing (our picture)
@@ -241,14 +260,6 @@ DoDrawGrp1
 	; start of line 2 of the 2LK
 	sta GRP1
 
-	; draw playfield
-	lda (MapPtr0),y ; playfiled pattern test
-	sta PF0
-	lda (MapPtr1),y ; playfiled pattern test
-	sta PF1
-	lda (MapPtr2),y ; playfiled pattern test
-	sta PF2
-
 	dey ; decrease the loop counter
 	bne pfLoop ; branch if more left to draw
 
@@ -283,52 +294,129 @@ ProcessJoystick
 	lda  SWCHA ; input registr
 	asl  ; test bit 0, left joy - right input
 	bcs Player1RightNotPressed ; this operation sets the carry for the fromer bit that fell off
-	; right pressed code
-	ldx ObjectX
-	inx
-	cpx #160
-	bne SaveX ; save X if we're not at the edge
-	ldx #0 ; warp to other edge
-SaveX
-	stx ObjectX
-	ldx #1
-	stx REFP0 ; makes turtle image face right
+	ldy #0 ; right presses
+	ldx #0
+	jsr CollisionDetection
 Player1RightNotPressed
 	asl ; test bit 1, left joy - left input
 	bcs Player1LeftNotPressed
-	; left pressed code
-	ldx ObjectX
-	dex
-	cpx #255 ; test for edge of screen
-	bne SaveX2
-	ldx #159 ; warp to toher side
-SaveX2
-	stx ObjectX
-	ldx #0
-	stx REFP0 ; makes turtle image face left
+	ldy #0 ; left presses
+	ldx #1
+	jsr CollisionDetection
 Player1LeftNotPressed
 	asl ; test bit 1, left joy - down input
 	bcs Player1DownNotPressed
-	; left pressed code
-	ldx ObjectY
-	dex
-	cpx #255
-	bne SaveY
-	ldx #PFHEIGHT
-SaveY
-	stx ObjectY
+	ldy #0
+	ldx #2
+	jsr CollisionDetection
 Player1DownNotPressed
 	asl ; test bit 2, left joy - up input
 	bcs Player1UpNotPressed
+	ldy #0
+	ldx #3
+	jsr CollisionDetection
+Player1UpNotPressed
+
+	; check left difficulty switch
+	bit SWCHB       ; state of Right Difficult in N (negative flag)
+									; state of Left Difficult in V (overflow flag)
+	bvc LeftIsBJoy
+
+	jsr BirdAI
+	rts      ; Left is A, return now TODO insert AI sub call here
+LeftIsBJoy
+	; left is b, player 2 can control the bird
+	asl ; test bit, right joy - right input
+	bcs Player2RightNotPressed
+	ldy #1
+	ldx #0
+	jsr CollisionDetection
+Player2RightNotPressed
+	asl ; test bit 1, right joy - left input
+	bcs Player2LeftNotPressed
+	ldy #1
+	ldx #1
+	jsr CollisionDetection
+Player2LeftNotPressed
+	asl ; test bit 1, right joy - down input
+	bcs Player2DownNotPressed
+	ldy #1
+	ldx #2
+	jsr CollisionDetection
+Player2DownNotPressed
+	asl ; test bit 2, right joy - up input
+	bcs Player2UpNotPressed
+	ldy #1
+	ldx #3
+	jsr CollisionDetection
+Player2UpNotPressed
+	rts
+
+BirdAI
+	rts
+
+;====================
+; This sub checks for collision based on inputs stored
+; Expected inputs:
+; y - object's address offset, p0, p1, m0, m1
+; x - move left, right, up, or down
+; Retruns: 0, 1 or 2 in x
+; 0 = no collision
+; 1 = wall collision
+; 2 = bird collision
+; 3 = missile collision
+;;====================
+CollisionDetection
+	cpx #0
+	beq RightCollision
+	cpx #1
+	beq LeftCollision
+	cpx #2
+	beq UpCollision
+	jmp DownCollision
+RightCollision
+	; right pressed code
+	ldx ObjectX,y
+	inx
+	cpx #160
+	bne SaveXRight ; save X if we're not at the edge
+	ldx #0 ; warp to other edge
+SaveXRight
+	stx ObjectX,y
+	ldx #1
+	stx REFP0,y ; makes turtle image face right
+	rts
+LeftCollision
 	; left pressed code
-	ldx ObjectY
+	ldx ObjectX,y
+	dex
+	cpx #255 ; test for edge of screen
+	bne SaveXLeft
+	ldx #159 ; warp to toher side
+SaveXLeft
+	stx ObjectX,y
+	ldx #0
+	stx REFP0,y ; makes turtle image face left
+	rts
+UpCollision
+	; down pressed code
+	ldx ObjectY,y
+	dex
+	cpx #255
+	bne SaveYUp
+	ldx #PFHEIGHT
+SaveYUp
+	stx ObjectY,y
+	rts
+DownCollision
+	; down pressed code
+	ldx ObjectY,y
 	inx
 	cpx PFHEIGHT+1
-	bne SaveY2
+	bne SaveYDown
 	ldx #0
-SaveY2
-	stx ObjectY
-Player1UpNotPressed
+SaveYDown
+	stx ObjectY,y
 	rts
 
 ; Plays the Intro noise
@@ -404,13 +492,11 @@ POloop
 	sta HMOVE           ; use fine-tune values to set final X positions
 
 	; every other frame load different animation
-	; to get odd frames and framecount with 1
-	;lda #0
-	;sta Temp
-	;lda FRAMECOUNT
-	;and #$1
-	;bne TurtleFrame1
-	;jmp TurtleFrame2 ; TODO this can be made much better
+	ldx AnimationTimer
+	inc AnimationTimer
+	cpx #10 ; every 5th or more frame draw 2nd frame
+	bmi TurtleFrame1
+	jmp TurtleFrame2 ; TODO this can be made much better
 TurtleFrame1
 	; TurtleDraw = PFHEIGHT + TURTLEHEIGHT - Y position
 	lda #(PFHEIGHT + TURTLEHEIGHT)
@@ -426,7 +512,29 @@ TurtleFrame1
 	lda #>(TurtleSprite + TURTLEHEIGHT - 1)
 	sbc #0
 	sta TurtlePtr+1
-	;jmp BirdFrame1
+	jmp BirdFrame1
+
+TurtleFrame2
+	; TurtleDraw = PFHEIGHT + TURTLEHEIGHT - Y position
+	lda #(PFHEIGHT + TURTLEHEIGHT2)
+	sec
+	sbc ObjectY
+	sta TurtleDraw
+
+	; TurtlePtr = PFHEIGHT + TURTLEHEIGHT - 1 - Y position
+	lda #<(TurtleSprite2 + TURTLEHEIGHT2 - 1) ; because sprite is upside down
+	sec
+	sbc ObjectY
+	sta TurtlePtr
+	lda #>(TurtleSprite2 + TURTLEHEIGHT2 - 1)
+	sbc #0
+	sta TurtlePtr+1
+
+	ldx AnimationTimer
+	cpx #20 ; compare to 10 if 10 reset to 0
+	bne BirdFrame1
+	lda #0
+	sta AnimationTimer
 
 BirdFrame1
 	; BirdDraw = PFHEIGHT + BIRDHEIGHT - Y position
@@ -515,12 +623,23 @@ TurtleSprite2:
 	.byte %01000010
 	.byte %11000011
 	.byte %00111100
-	.byte %00111100
+	.byte %01111110
 	.byte %00111100
 	.byte %01111110
 	.byte %01011010
 	.byte %01000010
 TURTLEHEIGHT2 = * - TurtleSprite2
+
+TurtleDeadSprite:
+	.byte %01000010
+	.byte %11000011
+	.byte %00111100
+	.byte %00111100
+	.byte %00111100
+	.byte %01111110
+	.byte %01011010
+	.byte %01000010
+TURTLEHDEADEIGHT2 = * - TurtleDeadSprite
 
 BirdSprite:
 	.byte %00000000
@@ -634,101 +753,50 @@ DigitGfx:
 ; the room table holds pf information for each 1/2 scanline as a byte. 45 bytes
 ; All rooms require PF1 and PF2 tables as well
 Room1LayoutPF0:
+	REPEAT PFHEIGHT/12
 	.byte %11111111
-	.byte %01111100
-	.byte %01000111
+	.byte %10000000
+	.byte %10000000
+	.byte %10000000
+	.byte %10000000
+	.byte %10000000
+	.byte %10000000
+	.byte %10000000
+	.byte %10000000
+	.byte %10000000
+	.byte %10000000
 	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
+	REPEND
 Room1LayoutPF1:
-	REPEAT PFHEIGHT
+	REPEAT PFHEIGHT/12
+	.byte %11111111
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
 	.byte %11111111
 	REPEND
 Room1LayoutPF2:
+	REPEAT PFHEIGHT/12
 	.byte %11111111
-	.byte %01111100
-	.byte %01000111
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
 	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %01000111
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
-	.byte %11111111
-	.byte %11111111
-	.byte %01111100
+	REPEND
 
 
 ; Table holding all the room start addresses next to each other
