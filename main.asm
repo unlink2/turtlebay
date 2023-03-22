@@ -284,6 +284,32 @@ TurtleSprite
 	.byte  %11100000
 
 	;------------------------------------------------------------------------------
+
+	;-----------------------------
+	; This table converts the "remainder" of the division by 15 (-1 to -15) to the correct
+	; fine adjustment value. This table is on a page boundary to guarantee the processor
+	; will cross a page boundary and waste a cycle in order to be at the precise position
+	; for a RESP0,x write
+
+fineAdjustBegin
+	.byte %01110000; Left 7
+	.byte %01100000; Left 6
+ 	.byte %01010000; Left 5
+	.byte %01000000; Left 4
+	.byte %00110000; Left 3
+	.byte %00100000; Left 2
+	.byte %00010000; Left 1
+	.byte %00000000; No movement.
+	.byte %11110000; Right 1
+	.byte %11100000; Right 2
+	.byte %11010000; Right 3
+	.byte %11000000; Right 4
+	.byte %10110000; Right 5
+	.byte %10100000; Right 6
+ 	.byte %10010000; Right 7
+
+fineAdjustTable EQU fineAdjustBegin - %11110001; NOTE: %11110001 = -15
+
 	ORG $FFFA
 
 InterruptVectors
