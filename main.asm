@@ -222,20 +222,12 @@ DoDrawGrp0 ;
 	sta GRP0 ; update player0 to draw turtle
 
 	; draw playfield
-	tya ; transfer y to a
-	ldy Temp ; load y with map counter
-	sta Temp ; store y for now
-
 	lda (MapPtr0),y ; playfiled pattern test
 	sta PF0
 	lda (MapPtr1),y ; playfiled pattern test
 	sta PF1
 	lda (MapPtr2),y ; playfiled pattern test
 	sta PF2
-	iny ; increment y
-	lda Temp ; load back old y
-	sty Temp ; store new map counter
-	tay ; and transfer it back
 
 	; precalculate date for next line
 	lda #TURTLEHEIGHT-1 ; height of gfx
@@ -248,6 +240,14 @@ DoDrawGrp1
 	sta WSYNC
 	; start of line 2 of the 2LK
 	sta GRP1
+
+	; draw playfield
+	lda (MapPtr0),y ; playfiled pattern test
+	sta PF0
+	lda (MapPtr1),y ; playfiled pattern test
+	sta PF1
+	lda (MapPtr2),y ; playfiled pattern test
+	sta PF2
 
 	dey ; decrease the loop counter
 	bne pfLoop ; branch if more left to draw
