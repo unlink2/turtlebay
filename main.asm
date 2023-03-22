@@ -133,52 +133,15 @@ Player1UpNotPressed
 
 	; Do 192 scanlines of colour-changing (our picture)
 	ldx 0
+Picture
+	stx COLUBK ; ranbow effect on background
+
+PlayFieldStart
 	; set up PF to display a wall around the game field
 	lda #%11111111
 	sta PF0
 	sta PF1
 	sta PF2
-Picture
-	stx COLUBK ; ranbow effect on background
-
-	lda #1 ; load an odd number into a
-	and FRAMECOUNT ; and it with framecount to see if even or odd frame count
-	; only do sprites on odd frames 0 == even 1 == odd
-	cmp NULL
-	beq SpriteDone
-
-	; sprite stuff 192 scanlines
-SpriteStart
-	cpx SPR1Y
-	bcc SpriteReset
-	cpy #SPRITE1H
-	beq SpriteReset ; if sprites are bigger than 32, we are done!
-	; SLEEP 20
-
-	lda SPR1X
-
-	sec ; Set the carry flag so no borrow will be applied during the division.
-.divideby15 ; Waste the necessary amount of time dividing X-pos by 15!
-	sbc #15
-	bcs .divideby15
-
-	sta RESP0
-
-	lda TurtleSprite,y
-	sta GRP0 ; modify sprite 0 shape
-	iny
-
-	jmp SpriteDone
-SpriteReset
-	; reset sprite registers to 0
-	lda #0
-	sta GRP0
-SpriteDone
-	sta WSYNC
-	inx
-	cpx #192
-	bne SpriteStart
-
 Top8LinesWall
 	sta WSYNC
 	inx
@@ -195,6 +158,39 @@ Top8LinesWall
 	; again, we don't bother writing PF0-PF2 every scanline - they never change!
 	ldy #0 ; load y with 0, we use y to count sprite tables
 MiddleLinesWall
+	lda #1 ; load an odd number into a
+	and FRAMECOUNT ; and it with framecount to see if even or odd frame count
+	; only do sprites on even frames 0 == even 1 == odd
+	cmp NULL
+	beq SpriteDone
+	; sprite stuff
+SpriteStart
+	cpx SPR1Y
+	bcc SpriteReset
+	cpy #SPRITE1H
+	beq SpriteReset ; if sprites are bigger than 32, we are done!
+	; SLEEP 20
+
+	lda SPR1X
+
+	sec ; Set the carry flag so no borrow will be applied during the division.
+.divideby15 ; Waste the necessary amount of time dividing X-pos by 15!
+	sbc #15
+	bcs .divideby15
+
+	sta RESP0,x
+
+	lda TurtleSprite,y
+	sta GRP0 ; modify sprite 0 shape
+	iny
+
+	jmp SpriteDone
+SpriteReset
+	; reset sprite registers to 0
+	lda #0
+	sta GRP0
+SpriteDone
+
 	; push y to save for later
 	sta WSYNC
 
@@ -220,19 +216,19 @@ Bottom8LinesWall
 	inx
 	cpx #192
 	bne Bottom8LinesWall
-
+PlayFieldDone
 	; ---------------
 
-	lda #%01000010
-	sta VBLANK ; end of screen - start blanking
-
-
-
-	; 30 scanlines of overscan
+	; clear playfield first
 	lda #0
 	sta PF0
 	sta PF1
 	sta PF2
+
+	lda #%01000010
+	sta VBLANK ; end of screen - start blanking
+
+	; 30 scanlines of overscan
 
 	ldx #0
 Overscan
