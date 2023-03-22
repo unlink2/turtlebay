@@ -117,7 +117,7 @@ P1STARTX = 0
 P1STARTY = 0
 M0HEIGHT = 4
 M0RESPAWNT = 255
-MAPCOUNT = 1
+MAPCOUNT = 3
 OFFSETPERMAP = 6
 
 ; music volumes
@@ -236,6 +236,7 @@ Sleep12 ; jsr here to sleep for 12 cycles
 	rts
 
 VerticalBlank
+	jsr Random ; just call this to seed
 	; game logic call
 	jsr ProcessJoystick
 	jsr GameProgress
@@ -699,7 +700,7 @@ UpCollision
 	; down pressed code
 	ldx ObjectY,y
 	dex
-	cpx #$FF
+	cpx #$0
 	bne SaveYDown
 	ldx #PFHEIGHT
 SaveYDown
@@ -1021,7 +1022,7 @@ NextMap
 	tay
 	cpy #0 ; 0 does not require an offset
 	beq NextMapDone
-
+	dey
 	lda #OFFSETPERMAP
 	sta Temp
 	lda #0
@@ -1647,6 +1648,84 @@ Room1LayoutPF2
 	.byte %00000000
 	.byte %00000000
 
+Room2LayoutPF0:
+	.byte %11110000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %00010000
+	.byte %11110000
+	.byte %11111111
+	.byte %11111111
+	.byte %11111111
+Room2LayoutPF1:
+	.byte %11111111
+	.byte %00000000
+	.byte %00000000
+	.byte %00111000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %11000000
+	.byte %01000000
+	.byte %01000000
+	.byte %01000001
+	.byte %01000001
+	.byte %01000000
+	.byte %01000000
+	.byte %11000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00111000
+	.byte %00000000
+	.byte %00000000
+	.byte %11111111
+	.byte %00000000
+	.byte %11111111
+	.byte %00000000
+Room2LayoutPF2:
+	.byte %11111111
+	.byte %10000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00011100
+	.byte %00000100
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000100
+	.byte %00011100
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %10000000
+	.byte %11111111
+	.byte %00000000
+	.byte %11111111
+	.byte %00000000
 
 ; Table holding all the room start addresses next to each other
 ; might be able to store this in 3 different tables and not have the counter
@@ -1660,6 +1739,9 @@ RoomTable:
 	.word Room1LayoutPF0
 	.word Room1LayoutPF1
 	.word Room1LayoutPF2
+	.word Room2LayoutPF0
+	.word Room2LayoutPF1
+	.word Room2LayoutPF2
 ROOMTABLESIZE = * - RoomTable
 
 ; Sound tables
