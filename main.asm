@@ -89,11 +89,13 @@ ColourCycle ds 1 ; used for pause screen
 ; music should be input in reverse order because of the way the counter works!
 SoundEnabled ds 1 ; set to how many frames are to be played
 SoundTrackPtr ds 2 ; points to sound to be played
-SoundVolumePtr ds 2 ; points to volume for the track
+SoundVolumePtr ds 1 ; points to volume for the track
+SoundSpeed ds 1 ; speed of sound
 
 NoiseEnabled ds 1 ; set to amount of frames to play noise
 NoiseTrackPtr ds 2 ; points to noise to be played
-NoiseVolumePtr ds 2 ; points to volume for the track
+NoiseVolumePtr ds 1 ; points to volume for the track
+NoiseSpeed ds 1 ; speed of noise
 
 ; used by Random for an 8 bit random number
 Rand8 ds 1
@@ -117,6 +119,15 @@ M0RESPAWNT = 255
 MAPCOUNT = 1
 OFFSETPERMAP = 6
 
+; music volumes
+LEVELCLEARVOLUME = $09
+FOODCOLLECTEDVOLUME = $09
+BIRDHITPLAYERVOLUME = $09
+
+; music speed
+S_HALFSPEED = $1 ; and fore very other frame
+S_QUARTERSPEED = %11111 ; and for every 4th frame
+
 ;===============================================================================
 ; Define Start of Cartridge
 ;===============================================================================
@@ -135,9 +146,6 @@ Clear
   ; it sets all RAM, TIA registers and CPU registers to 0
   CLEAN_START
 Reset
-	ldx #1 ; only set intro state here
-	stx GameState
-
 	; seed the random number generator
 	lda INTIM       ; unknown value
 	sta Rand8       ; use as seed
@@ -157,6 +165,9 @@ Reset
 	jsr ResetPPositions
 
 	jsr SetM0Pos
+
+	ldx #1 ; only set intro state here
+	stx GameState
 
 StartOfFrame
 	; start of new frame
@@ -241,7 +252,29 @@ Picture
 	bne Picture
 	sta VBLANK ; turn on the display
 
-; draw score
+	; check for gamestate 2
+	ldx GameState
+	cpx #2 ; level clear
+	bne GameStateNot2Picture
+	; draw 197 lines
+	ldx #192
+GameStateLevelClearLoop
+	dex
+	sta WSYNC
+	bne GameStateLevelClearLoop
+
+	ldx Temp+1
+	dex
+	bne GameState2NotDone
+	; set gamestate to 0 again
+	ldx #0
+	stx GameState
+GameState2NotDone
+	stx Temp+1
+	rts
+GameStateNot2Picture
+
+	; draw score 5 lines
 	ldx #5
 scoreLoop
 	ldy DigitTens ; get the tens digit offset for the score
@@ -723,11 +756,11 @@ NoP0P1Collision ; p0 and p1 did not collide!
 	dex
 	stx Score
 	jsr SetM0Pos ; new position for m0
-	jsr FoodCollectedSong
+	jsr PlayFoodCollectedSong
 NoP0M0Collision
 	; now we check if m0 is in a wall
 	bit CXM0FB
-	bvc NoM0PFCollision ; if it is reloacte
+	bpl NoM0PFCollision ; if it is reloacte
 	jsr SetM0Pos
 NoM0PFCollision
 CollisionDone
@@ -762,13 +795,12 @@ Noise
 	lda (NoiseTrackPtr),y
 	sta AUDF1
 
-	ldy 0
-	lda (NoiseVolumePtr),y
+	lda NoiseVolumePtr
 	sta AUDV1
 
 	; dec every 2nd frame
 	lda Framecount
-	and #1
+	and NoiseSpeed
 	beq DoNotDecNoise
 	dec NoiseEnabled
 DoNotDecNoise
@@ -780,13 +812,12 @@ Sound
 	lda (SoundTrackPtr),y
 	sta AUDF0
 
-	ldy 0
-	lda (SoundVolumePtr),y
+	lda SoundVolumePtr
 	sta AUDV0
 
 	; dec every 2nd frame
 	lda Framecount
-	and #1
+	and SoundSpeed
 	beq DoNotDecSound
 	dec SoundEnabled
 DoNotDecSound
@@ -813,28 +844,46 @@ PlayBirdHitPlayerSong
 	lda BirdHitPlayerTrack+1
 	sta SoundTrackPtr+1
 
-	lda BirdHitPlayerVolume
+	lda #BIRDHITPLAYERVOLUME
 	sta SoundVolumePtr
-	lda BirdHitPlayerVolume+1
-	sta SoundVolumePtr+1
 
 	lda #BIRDHITPLAYERTRACKSIZE ; 4 frames long
 	sta SoundEnabled
+
+	lda #S_HALFSPEED
+	sta SoundSpeed
 	rts
 
-FoodCollectedSong
+PlayFoodCollectedSong
 	lda FoodCollectedTrack
 	sta SoundTrackPtr
 	lda FoodCollectedTrack+1
 	sta SoundTrackPtr+1
 
-	lda FoodCollectedVolume
+	lda #FOODCOLLECTEDVOLUME
 	sta SoundVolumePtr
-	lda FoodCollectedVolume+1
-	sta SoundVolumePtr+1
 
 	lda #FOODCOLLECTEDTRACKSIZE ; 4 frames long
 	sta SoundEnabled
+
+	lda #S_HALFSPEED
+	sta SoundSpeed
+	rts
+
+PlayLevelClearSong
+	lda LevelClearTrack
+	sta SoundTrackPtr
+	lda LevelClearTrack+1
+	sta SoundTrackPtr+1
+
+	lda #LEVELCLEARVOLUME
+	sta SoundVolumePtr
+
+	lda #LEVELCLEARTRACKSIZE ; 4 frames long
+	sta SoundEnabled
+
+	lda #S_HALFSPEED
+	sta SoundSpeed
 	rts
 
 SetM0Pos
@@ -906,14 +955,22 @@ NextLevel
 	inc Level
 	inc Lives
 	lda #3
+	clc
 	adc Level
 	; score is 3 + level
 	sta Score
 	ldx #0
 	stx MapsCleared
+
+	ldx #2 ; store 2 in gamestate to play level clear animation and play the tune
+	stx GameState
+	ldx #LEVELCLEARTRACKSIZE*2
+	stx Temp+1 ; used for frame counter for blank screen
+	jsr PlayLevelClearSong
 	rts
 
 NextMap
+	inc Lives
 	inc MapsCleared
 	lda #3
 	adc Level
@@ -921,6 +978,20 @@ NextMap
 	sta Score
 
 	; now we roll for next map
+
+	; this is the new code for generating maps from fragments
+	;jsr Random
+	;lda Rand8
+	;and #ROOMTABLESIZE ; only allow MAPCOUNT for roll
+	;sta CurrentMap
+	;lda Rand8
+	;and #ROOMTABLESIZE ; only allow MAPCOUNT for roll
+	;sta CurrentMap+1
+	;lda Rand8
+	;and #ROOMTABLESIZE ; only allow MAPCOUNT for roll
+	;sta CurrentMap+2
+
+	; this is the old code to pick a static map
 	jsr Random
 	lda Rand8
 	and #MAPCOUNT ; only allow MAPCOUNT for roll
@@ -944,6 +1015,17 @@ NextMapDone
 	rts
 
 SetObjectColours
+	; check for gamestate 2
+	ldx GameState
+	cpx #2 ; level clear
+	bne GameStateNot2Col
+
+	lda #$86 ; blue for background
+	clc
+	adc Temp
+	sta COLUBK
+	rts ; and return
+GameStateNot2Col
 	ldy #3 ; we're going to set 4 colours
 	; ldy #3 ;
 	lda SWCHB ; read the state of the console switches
@@ -1533,6 +1615,7 @@ RoomTable:
 	.word Room1LayoutPF0
 	.word Room1LayoutPF1
 	.word Room1LayoutPF2
+ROOMTABLESIZE = * - RoomTable
 
 ; Sound tables
 BirdHitPlayerTrack
@@ -1556,23 +1639,22 @@ FoodCollectedTrack
 	.byte $7D
 FOODCOLLECTEDTRACKSIZE = * - FoodCollectedTrack
 
-FoodCollectedVolume
-	.byte $02
-
-BirdHitPlayerVolume
-	.byte $09
-
 LevelClearTrack
+	.byte $0F
+	.byte $0F
+	.byte $0F
+	.byte $0F
+	.byte $0F
+	.byte $0F
+	.byte $0F
+	.byte $0F
+	.byte $0F
+	.byte $0F
+	.byte $0F
 LEVELCLEARTRACKSIZE = * - LevelClearTrack
-
-LevelClearVolume
-	.byte $09
 
 GameOverTrack
 GAMEOVERTRACKSIZE = * - GameOverTrack
-
-GameOverVolume
-	.byte $09
 
 	;------------------------------------------------------------------------------
 
