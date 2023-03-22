@@ -99,7 +99,7 @@ P1STARTX = 0
 P1STARTY = 0
 M0HEIGHT = 4
 M0RESPAWNT = 255
-MAPCOUNT = 0
+MAPCOUNT = 1
 OFFSETPERMAP = 6
 
 ;===============================================================================
@@ -556,6 +556,7 @@ GameProgress
 	jmp ProgressDone
 NextMapProg
 	jsr NextMap
+	jsr ResetPPositions
 	jmp ProgressDone
 NextLevelProg
 	jsr NextLevel
@@ -814,6 +815,7 @@ NextMap
 	lda #0
 	; now add 6 for each number rolled
 NextMapLoop
+	clc
 	adc Temp
 	dey
 	bne NextMapLoop
@@ -1242,7 +1244,8 @@ DigitGfx:
 
 ; the room table holds pf information for each 1/2 scanline as a byte. 45 bytes
 ; All rooms require PF1 and PF2 tables as well
-Room1LayoutPF0:
+; Reminder that pf0 only uses 4 bits
+Room0LayoutPF0:
 	.byte %11110000
 	.byte %00010000
 	.byte %00010000
@@ -1265,7 +1268,10 @@ Room1LayoutPF0:
 	.byte %00010000
 	.byte %00010000
 	.byte %11110000
-Room1LayoutPF1:
+	.byte %11111111
+	.byte %11111111
+	.byte %11111111
+Room0LayoutPF1:
 	.byte %11111111
 	.byte %00000000
 	.byte %00000000
@@ -1288,7 +1294,10 @@ Room1LayoutPF1:
 	.byte %00000000
 	.byte %00000000
 	.byte %11111111
-Room1LayoutPF2:
+	.byte %11111111
+	.byte %11111111
+	.byte %11111111
+Room0LayoutPF2:
 	.byte %11111111
 	.byte %10000000
 	.byte %00000000
@@ -1311,10 +1320,92 @@ Room1LayoutPF2:
 	.byte %00000000
 	.byte %10000000
 	.byte %11111111
+	.byte %11111111
+	.byte %11111111
+	.byte %11111111
+
+Room1LayoutPF0
+	.byte %000001111
+	.byte %000000001
+	.byte %000000001
+	.byte %000000001
+	.byte %000111001
+	.byte %000001001
+	.byte %000001001
+	.byte %000000001
+	.byte %000000001
+	.byte %000000001
+	.byte %010001001
+	.byte %010001001
+	.byte %000000001
+	.byte %000000001
+	.byte %000000001
+	.byte %000001001
+	.byte %000001001
+	.byte %000111001
+	.byte %000000001
+	.byte %000000001
+	.byte %000000001
+	.byte %000000001
+	.byte %000000001
+	.byte %000001111
+Room1LayoutPF1
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00111110
+	.byte %00000010
+	.byte %00000010
+	.byte %00000010
+	.byte %00000010
+	.byte %00000010
+	.byte %11111110
+	.byte %11111110
+	.byte %00000010
+	.byte %00000010
+	.byte %00000010
+	.byte %00000010
+	.byte %00000010
+	.byte %00111110
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+Room1LayoutPF2
+	.byte %00000000
+	.byte %00000000
+	.byte %00111110
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00100000
+	.byte %00111110
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
 
 
 ; Table holding all the room start addresses next to each other
 RoomTable:
+	.word Room0LayoutPF0
+	.word Room0LayoutPF1
+	.word Room0LayoutPF2
 	.word Room1LayoutPF0
 	.word Room1LayoutPF1
 	.word Room1LayoutPF2

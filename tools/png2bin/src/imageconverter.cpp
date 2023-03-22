@@ -1,7 +1,7 @@
 #include"include/imageconverter.h"
 #include"include/colour.h"
 #include <exception>
-#include<string>
+#include <string>
 #include <sstream>
 #include <iomanip>
 #include <iostream>
@@ -30,19 +30,10 @@ namespace Image {
     x * width + y
     This simulates a 2d array with less of a memory mess
     */
-    this->converted = new unsigned int[image->get_width() * image->get_height()];
-    if(!this->converted) {
-      std::cerr << red << "[FATAL] " << def
-      << "Unable to allocate enough memory for converted image!" << std::endl;
-      exit(-1);
-    }
   }
 
   ImageConverter::~ImageConverter() {
     // TODO error when freeing
-    if(this->converted) {
-      delete[] this->converted;
-    }
 
     if(this->image) {
       delete this->image;
@@ -53,9 +44,10 @@ namespace Image {
     if(settings->verbose) {
       std::cout << "Converting pixels" << std::endl;
     }
-
-    for(int w = 0; w < this->image->get_width(); w++) {
-      for(int h = 0; h < this->image->get_height(); h++) {
+    converted.clear();
+    for(int h = 0; h < this->image->get_height(); h++) {
+      converted.emplace_back(std::vector<unsigned int>());
+      for(int w = 0; w < this->image->get_width(); w++) {
         png::rgb_pixel pixel = image->get_pixel(w, h);
 
         // converted pixel
@@ -100,6 +92,8 @@ namespace Image {
           std::cerr << "Pixel (" << w << "/" << h << ") "
           << red << "[WARNING] " << def << "Colour " << hexColour << " not found in list. Defaulting to 0 "
           << std::endl;
+
+          colourFound = 0;
         }
 
         if(settings->verbose) {
@@ -110,9 +104,9 @@ namespace Image {
           << (short)pixel.blue
           << " " << hexColour << std::endl;
         }
-        this->converted[w * image->get_width() + h] = pixelConverted;
+        converted[h].emplace_back(pixelConverted);
         if(settings->verbose) {
-          std::cout << "Set " << this->converted[w * image->get_width() + h] << "(" <<
+          std::cout << "Set " << converted[w][h] << "(" <<
           w * image->get_width() + h << "th element)\n\n";
         }
       }
@@ -121,33 +115,26 @@ namespace Image {
 
   void ImageConverter::writePixels() {
     std::ofstream outfile;
-
     outfile.open(settings->outfile);
-    if(settings->outputBase == "detailed") {
-      if(settings->verbose) std::cout << "Outputting sprite in detailed mode!\n";
 
-      // outputting to file
-      unsigned short stepCounter = image->get_width() / 8;
-      for(int sc = 0; sc < stepCounter; sc++) {
-        // each of these loops will write 8 by 8 pixels at most so we loop N times to get all arrays
-        outfile << "; Sprite of " << settings->inputfile << " Part " << sc << "/" << stepCounter << std::endl;
-        for(int x = 0; x < image->get_width(); x++) {
-          outfile << ".byte ";
-
-          for(int y = stepCounter * 8 - 8; y < 8 * stepCounter; y++) {
-            if(y < image->get_width()) {
-              outfile << converted[x * image->get_width() + y];
-            } else {
-              outfile << 0;
-            }
-          }
-          outfile << std::endl;
+    // outputting to file
+    outfile << "; Sprite of " << settings->inputfile << std::endl;
+    for(int x = 0; x < image->get_height(); x++) {
+      outfile << ".byte \%";
+      // pf0 is inverted!
+      if(settings->outputBase == "p0") {
+        for(int y = image->get_width(); y >= 0; y--) {
+          outfile << converted[x][y];
         }
-        outfile << std::endl;
+      } else {
+        for(int y = 0; y < image->get_width(); y++) {
+          outfile << converted[x][y];
+        }
       }
-
-      outfile << std::endl << std::endl;
+      outfile << std::endl;
     }
+    outfile << std::endl;
+
     outfile.close();
   }
 }

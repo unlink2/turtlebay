@@ -22,12 +22,12 @@ void init() {
 
   // set default options
   globalsettings.appmode = "sprite";
-  globalsettings.outputBase = "detailed";
+  globalsettings.outputBase = "default";
   globalsettings.colours = (uint32_t*)malloc(5 * sizeof(uint32_t));
 
   // set default colour pallette
-  globalsettings.colours[0] = 0x000000;
-  globalsettings.colours[1] = 0xFFFFFF;
+  globalsettings.colours[0] = 0xFFFFFF;
+  globalsettings.colours[1] = 0x000000;
 
   globalsettings.coloursLen = 2;
 
@@ -57,7 +57,7 @@ void parseArgs(int argc, char **argv) {
       "-v\t(optional) Outputs version information\n" <<
       "-f ./example.png\t(required) Set the file that is to be converted\n" <<
       "-o ./output\t(optional) Set the output file and directory\n" <<
-      "-b detailed/compressed\t(optional) Set the base to output the data in (defaults to detailed)\n" <<
+      "-b p0/default\t(optional) Set the base to output the data in (defaults to detailed)\n" <<
       "verbose\t(optional) Verbose mode.";
     } else if(arg == "-f") {
       if(extraArgumentsNeeded(1, argc, index)) {
@@ -70,7 +70,7 @@ void parseArgs(int argc, char **argv) {
     } else if(arg == "-o") {
       if(extraArgumentsNeeded(1, argc, index)) {
         index++;
-        globalsettings.outfile = argv[index];
+        globalsettings.outfile = argv[index] + '\0';
       } else {
         std::cerr << red << "[FATAL]" << def << " Insufficent arguments: Use -h for syntax!" << std::endl;
         exit(-1);
