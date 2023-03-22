@@ -117,7 +117,7 @@ P1STARTX = 0
 P1STARTY = 0
 M0HEIGHT = 4
 M0RESPAWNT = 255
-MAPCOUNT = 3
+MAPCOUNT = 4
 OFFSETPERMAP = 6
 
 ; music volumes
@@ -690,7 +690,7 @@ DownCollision
 	; up pressed code
 	ldx ObjectY,y
 	inx
-	cpx #PFHEIGHT+1 ; used to be $60 - works with $FF too because this is the edge of the screen
+	cpx #PFHEIGHT+3 ; used to be $60 - works with $FF too because this is the edge of the screen
 	bne SaveYUp
 	ldx #0
 SaveYUp
@@ -1018,11 +1018,11 @@ NextMap
 	; this is the old code to pick a static map
 	jsr Random
 	lda Rand8
-	and #MAPCOUNT ; only allow MAPCOUNT for roll
+	and #MAPCOUNT-1 ; only allow MAPCOUNT for roll
 	tay
 	cpy #0 ; 0 does not require an offset
 	beq NextMapDone
-	dey
+	;dey
 	lda #OFFSETPERMAP
 	sta Temp
 	lda #0
@@ -1494,8 +1494,14 @@ DigitGfx:
 ; All rooms require PF1 and PF2 tables as well
 ; Reminder that pf0 only uses 4 bits
 Room0LayoutPF0:
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
 	.byte %11110000
 	.byte %00010000
+	.byte %00000000
+	.byte %00000000
 	.byte %00010000
 	.byte %00010000
 	.byte %00010000
@@ -1505,48 +1511,42 @@ Room0LayoutPF0:
 	.byte %00010000
 	.byte %00010000
 	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
+	.byte %00000000
+	.byte %00000000
 	.byte %00010000
 	.byte %11110000
-	.byte %11111111
-	.byte %11111111
-	.byte %11111111
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %11110000
 Room0LayoutPF1:
-	.byte %11111111
-	.byte %00000000
-	.byte %00000000
-	.byte %00111000
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
-	.byte %11000000
-	.byte %01000000
-	.byte %01000000
-	.byte %01000001
-	.byte %01000001
-	.byte %01000000
-	.byte %01000000
-	.byte %11000000
+	.byte %00000000
+	.byte %00011000
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
-	.byte %00111000
+	.byte %00011000
+	.byte %00011000
+	.byte %00111100
+	.byte %01111110
+	.byte %01111110
+	.byte %01111110
+	.byte %00111100
+	.byte %00011000
+	.byte %00011000
 	.byte %00000000
 	.byte %00000000
-	.byte %11111111
-	.byte %11111111
-	.byte %11111111
-	.byte %11111111
+	.byte %00000000
+	.byte %00011000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00111100
 Room0LayoutPF2:
-	.byte %11111111
+	.byte %00000000
 	.byte %10000000
 	.byte %00000000
 	.byte %00000000
@@ -1567,37 +1567,38 @@ Room0LayoutPF2:
 	.byte %00000000
 	.byte %00000000
 	.byte %10000000
-	.byte %11111111
-	.byte %11111111
-	.byte %11111111
-	.byte %11111111
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
 
 Room1LayoutPF0
-	.byte %000001111
-	.byte %000000001
-	.byte %000000001
-	.byte %000000001
-	.byte %000111001
-	.byte %000001001
-	.byte %000001001
-	.byte %000000001
-	.byte %000000001
-	.byte %000000001
-	.byte %010001001
-	.byte %010001001
-	.byte %000000001
-	.byte %000000001
-	.byte %000000001
-	.byte %000001001
-	.byte %000001001
-	.byte %000111001
-	.byte %000000001
-	.byte %000000001
-	.byte %000000001
-	.byte %000000001
-	.byte %000000001
-	.byte %000001111
+	.byte %00001111
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %00111001
+	.byte %00001001
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %10001001
+	.byte %10001001
+	.byte %10001001
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %00001001
+	.byte %00111001
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %00001111
 Room1LayoutPF1
+	.byte %00000000
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
@@ -1607,10 +1608,9 @@ Room1LayoutPF1
 	.byte %00000010
 	.byte %00000010
 	.byte %00000010
-	.byte %00000010
 	.byte %11111110
 	.byte %11111110
-	.byte %00000010
+	.byte %11111110
 	.byte %00000010
 	.byte %00000010
 	.byte %00000010
@@ -1625,8 +1625,8 @@ Room1LayoutPF1
 Room1LayoutPF2
 	.byte %00000000
 	.byte %00000000
+	.byte %00000000
 	.byte %00111110
-	.byte %00100000
 	.byte %00100000
 	.byte %00100000
 	.byte %00100000
@@ -1649,82 +1649,160 @@ Room1LayoutPF2
 	.byte %00000000
 
 Room2LayoutPF0:
-	.byte %11110000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %00010000
-	.byte %11110000
-	.byte %11111111
-	.byte %11111111
-	.byte %11111111
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
 Room2LayoutPF1:
-	.byte %11111111
-	.byte %00000000
-	.byte %00000000
-	.byte %00111000
-	.byte %00000000
-	.byte %00000000
-	.byte %00000000
-	.byte %11000000
-	.byte %01000000
-	.byte %01000000
-	.byte %01000001
-	.byte %01000001
-	.byte %01000000
-	.byte %01000000
-	.byte %11000000
+	.byte %00011000
+	.byte %00011000
+	.byte %00011000
+	.byte %00011000
+	.byte %00011000
+	.byte %01111110
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
-	.byte %00111000
+	.byte %01111110
+	.byte %00011000
+	.byte %00011000
+	.byte %00011000
+	.byte %00011000
+	.byte %00011000
+	.byte %01111110
 	.byte %00000000
 	.byte %00000000
-	.byte %11111111
 	.byte %00000000
-	.byte %11111111
-	.byte %00000000
+	.byte %01111110
+	.byte %00011000
+	.byte %00011000
+	.byte %00011000
+	.byte %00011000
 Room2LayoutPF2:
-	.byte %11111111
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %11111110
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %11000000
+	.byte %00111110
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %01011100
+	.byte %00000000
+	.byte %00000000
+	.byte %01000000
+	.byte %01111001
+	.byte %00000001
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+
+Room3LayoutPF0:
+	.byte %00000000
+	.byte %00000000
+	.byte %01000000
+	.byte %01000000
+	.byte %01000000
+	.byte %01000000
+	.byte %01000000
+	.byte %01000000
+	.byte %01000000
+	.byte %01000000
+	.byte %11000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
 	.byte %10000000
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
 	.byte %00000000
-	.byte %00011100
-	.byte %00000100
-	.byte %00000000
-	.byte %00000000
-	.byte %00000000
-	.byte %00000000
-	.byte %00000000
-	.byte %00000000
-	.byte %00000100
-	.byte %00011100
-	.byte %00000000
-	.byte %00000000
 	.byte %00000000
 	.byte %00000000
 	.byte %10000000
-	.byte %11111111
+	.byte %00000000
+	.byte %00000000
+Room3LayoutPF1:
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %01111000
+	.byte %00001000
+	.byte %00001000
+	.byte %00001000
+	.byte %11111000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
 	.byte %00000000
 	.byte %11111111
+	.byte %00000000
+	.byte %00000000
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %11111111
+	.byte %00000000
+	.byte %00000000
+Room3LayoutPF2:
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %11111110
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %11000000
+	.byte %00111110
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %00000000
+	.byte %01111111
+	.byte %01000001
+	.byte %01000001
+	.byte %01000001
+	.byte %01111001
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %00000001
+	.byte %00000000
 	.byte %00000000
 
 ; Table holding all the room start addresses next to each other
@@ -1742,6 +1820,9 @@ RoomTable:
 	.word Room2LayoutPF0
 	.word Room2LayoutPF1
 	.word Room2LayoutPF2
+	.word Room3LayoutPF0
+	.word Room3LayoutPF1
+	.word Room3LayoutPF2
 ROOMTABLESIZE = * - RoomTable
 
 ; Sound tables
